@@ -30,9 +30,9 @@
   export LLVM_HOME=<path to LLVM build>
 ```
 
-4. Clone fpsanv2 git repo.
+4. Clone fpsan git repo.
 ```
-  git clone https://github.com/rutgers-apl/fpsanv2.git
+  git clone https://github.com/rutgers-apl/fpsanitizer.git
 
 ```
 
