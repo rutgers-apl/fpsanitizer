@@ -306,6 +306,7 @@ extern "C" void fpsan_store_shadow(void* toAddr, temp_entry* src){
   dest->key = m_lock_key_map[m_key_stack_top]; 
   dest->is_init = true;
   dest->tmp_ptr = src;
+  dest->opcode = src->opcode;
 
 }
 

@@ -40,7 +40,7 @@ const size_t SECONDARY_INDEX_BITS = 24;
 const size_t PRIMARY_MASK = 0x3fffff;
 
 #define debug 0
-#define debugtrace 1
+#define debugtrace 0
 #define debugerror 0
 
 #define ERRORTHRESHOLD 35

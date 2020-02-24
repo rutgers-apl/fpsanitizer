@@ -4,7 +4,11 @@ CAMLFLAGs=
 CSRC = $(wildcard *.c)
 COUT = $(patsubst %.c,%.o,$(CSRC))
 
-CC = clang -pg -Xclang -load -Xclang $(FPSAN_HOME)/fpsan_pass/build/FPSan/libFPSanitizer.so
+#DEBUGTRACEFLAG = -D debugtrace
+DEBUGTRACEFLAG = 
+
+
+CC = clang $(DEBUGTRACEFLAG) -pg -Xclang -load -Xclang $(FPSAN_HOME)/fpsan_pass/build/FPSan/libFPSanitizer.so
 
 all: $(COUT) $(CAMLOUT)
 
@@ -21,4 +25,4 @@ all: $(COUT) $(CAMLOUT)
 
 
 clean:
-	rm -rf *.o *.sout *.dSYM *~ *.log functions.txt  *.out
+	rm -rf *.o *.sout *.dSYM *~ *.log functions.txt  *.out *.ll *.bc
