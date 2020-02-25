@@ -37,7 +37,7 @@ const size_t SS_PRIMARY_TABLE_ENTRIES = ((size_t) 4194304);//2^22
 const size_t SS_SEC_TABLE_ENTRIES = ((size_t) 16*(size_t) 1024 * (size_t) 1024); // 2^24
 const size_t PRIMARY_INDEX_BITS = 22;
 const size_t SECONDARY_INDEX_BITS = 24;
-const size_t PRIMARY_MASK = 0x3fffff;
+const size_t SECONDARY_MASK = 0xffffff;
 
 #define debug 0
 #define debugtrace 0

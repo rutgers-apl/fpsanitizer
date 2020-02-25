@@ -232,8 +232,9 @@ long double m_get_longdouble(temp_entry *real) {
   return mpfr_get_ld(real->val, MPFR_RNDN);
 }
 
-smem_entry* m_get_shadowaddress(size_t addrInt){
-  size_t primary_index = (addrInt >> SECONDARY_INDEX_BITS ) & PRIMARY_MASK;
+smem_entry* m_get_shadowaddress(size_t address){
+  size_t addrInt = address >> 2;
+  size_t primary_index = (addrInt >> SECONDARY_INDEX_BITS );
   smem_entry* primary_ptr = m_shadow_memory[primary_index];
   if (primary_ptr == NULL) {
     size_t sec_length = (SS_SEC_TABLE_ENTRIES) * sizeof(smem_entry);
@@ -241,7 +242,7 @@ smem_entry* m_get_shadowaddress(size_t addrInt){
         MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0);
     m_shadow_memory[primary_index] = primary_ptr;
   }
-  size_t offset = (addrInt) & PRIMARY_MASK;
+  size_t offset = (addrInt) & SECONDARY_MASK;
   smem_entry* realAddr = primary_ptr + offset;
   if(!realAddr->is_init){
     realAddr->is_init = true;
