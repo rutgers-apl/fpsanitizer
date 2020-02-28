@@ -768,7 +768,7 @@ extern "C" bool fpsan_check_branch_f(float op1d, temp_entry* op1,
   return realRes;
 }
 
-extern "C" bool __check_branch_d(double op1d, temp_entry* op1,
+extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
 				 double op2d, temp_entry* op2,
 				 size_t fcmpFlag, bool computedRes,
 				 size_t lineNo){

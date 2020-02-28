@@ -247,7 +247,7 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 	IRB.CreateCall(FuncInit, {BOGEP});
 
         if(isFloat(UI->getType())){
-	  FuncInit = M->getOrInsertFunction("setMpfrF", VoidTy, MPtrTy, UI->getType(), Int32Ty);
+	  FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, UI->getType(), Int32Ty);
         }
         else if(isDouble(UI->getType())){
 
