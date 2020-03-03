@@ -1119,6 +1119,18 @@ extern "C" void fpsan_mpfr_sqrt(temp_entry* op1,
  
 }
 
+extern "C" void fpsan_mpfr_sqrtf(temp_entry* op1, 
+				float op1d,
+				temp_entry* res, 
+				float computedRes,
+				unsigned long long int instId, 
+				bool debugInfoAvail, 
+				unsigned int linenumber, 
+				unsigned int colnumber){
+
+  handle_math_d(SQRT, op1d, op1, computedRes, res, linenumber);
+ 
+}
 extern "C" void fpsan_mpfr_floor(temp_entry* op1, 
                                  double op1d,
                                  temp_entry* res, 
