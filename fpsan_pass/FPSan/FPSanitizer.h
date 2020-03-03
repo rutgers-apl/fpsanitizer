@@ -38,7 +38,7 @@ namespace {
     Instruction* getNextInstruction(Instruction *I, BasicBlock *BB);
     Instruction* getNextInstructionNotPhi(Instruction *I, BasicBlock *BB);
     void findInterestingFunctions(Function *F);
-    Value* handleOperand(Instruction *I, Value* OP, Function *F);
+    bool handleOperand(Instruction *I, Value* OP, Function *F, Value **InstIdx);
     void handleStore(StoreInst *SI, BasicBlock *BB, Function *F);
     void handleNewPhi(Function *F);
     void copyPhi(Instruction *I, Function *F);
@@ -62,6 +62,7 @@ namespace {
     void handleFuncMainInit(Function *F);
     void handleInit(Module *M);
     void handleIns(Instruction *I, BasicBlock *BB, Function *F);
+    long getTotalFPInst(Function *F);
     ConstantInt* GetInstId(Function *F, Instruction* I);
     StructType *MPFRTy;
     Type *MPtrTy;
