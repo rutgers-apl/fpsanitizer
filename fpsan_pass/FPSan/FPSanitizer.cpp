@@ -1248,8 +1248,9 @@ void FPSanitizer::handleStore(StoreInst *SI, BasicBlock *BB, Function *F){
   Type *OpTy = OP->getType();
   Instruction *OpIns = dyn_cast<Instruction>(OP);
   //TODO: do we need to check for bitcast for store?
-  BitCastInst* BCToAddr = new BitCastInst(Addr, 
-					  PointerType::getUnqual(Type::getInt8Ty(M->getContext())),"", I);
+  BitCastInst*
+    BCToAddr = new BitCastInst(Addr, 
+			       PointerType::getUnqual(Type::getInt8Ty(M->getContext())),"", I);
   if (BitCastInst *BI = dyn_cast<BitCastInst>(Addr)){
     BTFlag = checkIfBitcastFromFP(BI);
   }
@@ -1262,11 +1263,13 @@ void FPSanitizer::handleStore(StoreInst *SI, BasicBlock *BB, Function *F){
     }
     else{
       if(isFloat(StoreTy)){
-        SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow_fconst", VoidTy, PtrVoidTy, OpTy, Int32Ty);
+        SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow_fconst",
+					     VoidTy, PtrVoidTy, OpTy, Int32Ty);
         IRB.CreateCall(SetRealTemp, {BCToAddr, OP, lineNumber});
       }
       else if(isDouble(StoreTy)){
-        SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow_dconst", VoidTy, PtrVoidTy, OpTy, Int32Ty);
+        SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow_dconst",
+					     VoidTy, PtrVoidTy, OpTy, Int32Ty);
         IRB.CreateCall(SetRealTemp, {BCToAddr, OP, lineNumber});
       }
     }
@@ -1310,8 +1313,8 @@ void FPSanitizer::handlePhi(PHINode *PN, BasicBlock *BB, Function *F){
   IRBuilder<> IRB(dyn_cast<Instruction>(dyn_cast<Instruction>(PN)));
 
   PHINode* iPHI = IRB.CreatePHI (MPtrTy, 2);
-  //Wherever old phi node has been used, we need to replace it with new phi node. That's
-  //why need to track it and keep it in RegIdMap
+  // Wherever old phi node has been used, we need to replace it with
+  //new phi node. That's why need to track it and keep it in RegIdMap
   MInsMap.insert(std::pair<Instruction*, Instruction*>(PN, iPHI));
   NewPhiMap.insert(std::pair<Instruction*, Instruction*>(dyn_cast<Instruction>(PN), iPHI));
 
@@ -1400,15 +1403,9 @@ void FPSanitizer::handleReturn(ReturnInst *RI, BasicBlock *BB, Function *F){
         Constant* TotalArgsConst = ConstantInt::get(Type::getInt64Ty(M->getContext()), TotalArgs); 
         AddFunArg = M->getOrInsertFunction("fpsan_set_return", VoidTy, MPtrTy, Int64Ty, OP->getType());
         IRB.CreateCall(AddFunArg, {OpIdx, TotalArgsConst, OP});
+	return;
     }
-    else{
-      FuncInit = M->getOrInsertFunction("fpsan_func_exit", VoidTy, Int64Ty);
-      long TotalArgs = FuncTotalArg.at(F);
-      Constant* ConsTotIns = ConstantInt::get(Type::getInt64Ty(M->getContext()), TotalArgs); 
-      IRB.CreateCall(FuncInit, {ConsTotIns});
-    }
-  }
-  else{
+    
     FuncInit = M->getOrInsertFunction("fpsan_func_exit", VoidTy, Int64Ty);
     long TotalArgs = FuncTotalArg.at(F);
     Constant* ConsTotIns = ConstantInt::get(Type::getInt64Ty(M->getContext()), TotalArgs); 
@@ -1614,9 +1611,10 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
       case Instruction::FAdd:                                                                        
       case Instruction::FSub:
       case Instruction::FMul:
-      case Instruction::FDiv:{
-                               handleBinOp(BO, BB, F);
-                             } 
+      case Instruction::FDiv:
+	{
+	  handleBinOp(BO, BB, F);
+	} 
     }
   }
   else if (CallInst *CI = dyn_cast<CallInst>(I)){
@@ -1638,34 +1636,34 @@ bool FPSanitizer::runOnModule(Module &M) {
   StructType* MPFRTy1 = StructType::create(M.getContext(), "struct.fpsan_mpfr");
   MPFRTy1->setBody({Type::getInt64Ty(M.getContext()), Type::getInt32Ty(M.getContext()),
         Type::getInt64Ty(M.getContext()), Type::getInt64PtrTy(M.getContext())});
-
+  
   MPFRTy = StructType::create(M.getContext(), "struct.f_mpfr");
   MPFRTy->setBody(llvm::ArrayType::get(MPFRTy1, 1));
-
+  
   Real = StructType::create(M.getContext(), "struct.temp_entry");
   RealPtr = Real->getPointerTo();
   Real->setBody({MPFRTy,
 	Type::getDoubleTy(M.getContext()),
 	Type::getInt32Ty(M.getContext()),
 	Type::getInt32Ty(M.getContext()),
-	  
+	
 	Type::getInt64Ty(M.getContext()),
 	Type::getInt64Ty(M.getContext()),
 	Type::getInt64Ty(M.getContext()),
 	Type::getInt64Ty(M.getContext()),
 	RealPtr,
-	  
+	
 	Type::getInt64Ty(M.getContext()),
 	Type::getInt64Ty(M.getContext()),
 	RealPtr,
-	  
+	
 	Type::getInt32Ty(M.getContext()),
 	Type::getInt64Ty(M.getContext()),
 	Type::getInt1Ty(M.getContext())});
 
   MPtrTy = Real->getPointerTo();
   
-
+  
   //TODO::Iterate over global arrays to initialize shadow memory
   for (Module::global_iterator GVI = M.global_begin(), E = M.global_end();
                GVI != E; ) {
@@ -1699,14 +1697,16 @@ bool FPSanitizer::runOnModule(Module &M) {
     //dynamic lib
     createMpfrAlloca(F);
 
-    //if argument is used in any floating point computation, then we need to retrieve that argument
-    //from shadow stack.
-    //Instead of call __get_arg everytime opearnd is used, it is better to call once in start of the function
-    //and remember the address of shadow stack.
+    //if argument is used in any floating point computation, then we
+    //need to retrieve that argument from shadow stack.  Instead of
+    //call __get_arg everytime opearnd is used, it is better to call
+    //once in start of the function and remember the address of shadow
+    //stack.
     callGetArgument(F);
 
     if(F->getName() != "main"){
-      //add func_init and func_exit in the start and end of the function to set shadow stack variables
+      //add func_init and func_exit in the start and end of the
+      //function to set shadow stack variables
       handleFuncInit(F);
     }
     for (auto &BB : *F) {
