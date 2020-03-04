@@ -1017,7 +1017,8 @@ FPSanitizer::handleCallInst (CallInst *CI,
       Value *OpIdx;
       bool res = handleOperand(I, Op[i], F, &OpIdx);
       if(!res){
-        errs()<<"\nError !!! operand not found OP:"<<"\n";
+        errs()<<"\nError !!! metadata not found for operand:\n";
+        Op[i]->dump();
         errs()<<"In Inst:"<<"\n";
         I->dump();
         exit(1);
@@ -1121,7 +1122,8 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
     if(isFloatType(OpTy[i])){
       bool res = handleOperand(I, Op[i], F, &ConsIdx[i]);
       if(!res){
-        errs()<<"\nError !!! operand not found OP:"<<"\n";
+        errs()<<"\nError !!! metadata not found for operand:\n";
+        Op[i]->dump();
         errs()<<"In Inst:"<<"\n";
         I->dump();
         exit(1);
@@ -1295,7 +1297,8 @@ void FPSanitizer::handleNewPhi(Function *F){
         Value* InsIndex;
         bool res = handleOperand(it->first, IncValue, F, &InsIndex);
         if(!res){
-          errs()<<"\nError !!! operand not found OP:"<<"\n";
+          errs()<<"handleNewPhi:Error !!! metadata not found for operand:\n";
+          IncValue->dump();
           errs()<<"In Inst:"<<"\n";
           it->first->dump();
           exit(1);
@@ -1341,14 +1344,16 @@ void FPSanitizer::handleSelect(SelectInst *SI, BasicBlock *BB, Function *F){
   Value* InsIndex2, *InsIndex3;
   bool res1 = handleOperand(I, SI->getOperand(1), F, &InsIndex2);
   if(!res1){
-    errs()<<"\nError !!! operand not found OP:"<<"\n";
+    errs()<<"\nhandleSelect: Error !!! metadata not found for op:"<<"\n";
+    SI->getOperand(1)->dump();
     errs()<<"In Inst:"<<"\n";
     I->dump();
     exit(1);
   }
   bool res2 = handleOperand(I, SI->getOperand(2), F, &InsIndex3);
   if(!res2){
-    errs()<<"\nError !!! operand not found OP:"<<"\n";
+    errs()<<"\nhandleSelect: Error !!! metadata not found for op:"<<"\n";
+    SI->getOperand(1)->dump();
     errs()<<"In Inst:"<<"\n";
     I->dump();
     exit(1);
@@ -1380,37 +1385,38 @@ void FPSanitizer::handleReturn(ReturnInst *RI, BasicBlock *BB, Function *F){
       if (CallInst *CI = dyn_cast<CallInst>(&I)){
         Function *Callee = CI->getCalledFunction();
         if(Callee && Callee->getName() == "fpsan_clear_mpfr"){
-            Ins = &I;
+          Ins = &I;
           break;
         }
       }
     }
   }
-  
+
   IRBuilder<> IRB(Ins);
   if (RI->getNumOperands() != 0){
     Value *OP = RI->getOperand(0);
     if(isFloatType(OP->getType())){
-        bool res = handleOperand(dyn_cast<Instruction>(RI), OP, F, &OpIdx);
-        if(!res){
-          errs()<<"\nError !!! operand not found OP:"<<"\n";
-          errs()<<"In Inst:"<<"\n";
-          OP->dump();
-          exit(1);
-        }
-        long TotalArgs = FuncTotalArg.at(F);
-        Constant* ArgNo = ConstantInt::get(Type::getInt64Ty(M->getContext()), 0); // 0 for return
-        Constant* TotalArgsConst = ConstantInt::get(Type::getInt64Ty(M->getContext()), TotalArgs); 
-        AddFunArg = M->getOrInsertFunction("fpsan_set_return", VoidTy, MPtrTy, Int64Ty, OP->getType());
-        IRB.CreateCall(AddFunArg, {OpIdx, TotalArgsConst, OP});
-	return;
+      bool res = handleOperand(dyn_cast<Instruction>(RI), OP, F, &OpIdx);
+      if(!res){
+        errs()<<"\nhandleReturn: Error !!! metadata not found for op:"<<"\n";
+        OP->dump();
+        errs()<<"In Inst:"<<"\n";
+        OP->dump();
+        exit(1);
+      }
+      long TotalArgs = FuncTotalArg.at(F);
+      Constant* ArgNo = ConstantInt::get(Type::getInt64Ty(M->getContext()), 0); // 0 for return
+      Constant* TotalArgsConst = ConstantInt::get(Type::getInt64Ty(M->getContext()), TotalArgs); 
+      AddFunArg = M->getOrInsertFunction("fpsan_set_return", VoidTy, MPtrTy, Int64Ty, OP->getType());
+      IRB.CreateCall(AddFunArg, {OpIdx, TotalArgsConst, OP});
+      return;
     }
-    
-    FuncInit = M->getOrInsertFunction("fpsan_func_exit", VoidTy, Int64Ty);
-    long TotalArgs = FuncTotalArg.at(F);
-    Constant* ConsTotIns = ConstantInt::get(Type::getInt64Ty(M->getContext()), TotalArgs); 
-    IRB.CreateCall(FuncInit, {ConsTotIns});
+
   }
+  FuncInit = M->getOrInsertFunction("fpsan_func_exit", VoidTy, Int64Ty);
+  long TotalArgs = FuncTotalArg.at(F);
+  Constant* ConsTotIns = ConstantInt::get(Type::getInt64Ty(M->getContext()), TotalArgs); 
+  IRB.CreateCall(FuncInit, {ConsTotIns});
 }
 
 void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
@@ -1422,7 +1428,8 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   Value* InsIndex1, *InsIndex2; 
   bool res1 = handleOperand(I, BO->getOperand(0), F, &InsIndex1);
   if(!res1){
-    errs()<<"\nError !!! operand not found OP:"<<"\n";
+    errs()<<"handleBinOp: Error !!! metadata not found for op:"<<"\n";
+    BO->getOperand(0)->dump();
     errs()<<"In Inst:"<<"\n";
     I->dump();
     exit(1);
@@ -1430,7 +1437,8 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
 
   bool res2 = handleOperand(I, BO->getOperand(1), F, &InsIndex2);
   if(!res2){
-    errs()<<"\nError !!! operand not found OP:"<<"\n";
+    errs()<<"handleBinOp: Error !!! metadata not found for op:"<<"\n";
+    BO->getOperand(1)->dump();
     errs()<<"In Inst:"<<"\n";
     I->dump();
     exit(1);
@@ -1487,14 +1495,16 @@ void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
   Value *InsIndex1, *InsIndex2;
   bool res1 = handleOperand(I, FCI->getOperand(0), F, &InsIndex1);
   if(!res1){
-    errs()<<"\nError !!! operand not found OP:"<<"\n";
+    errs()<<"handleFcmp: Error !!! metadata not found for op:"<<"\n";
+    FCI->getOperand(0)->dump();
     errs()<<"In Inst:"<<"\n";
     I->dump();
     exit(1);
   }
   bool res2 = handleOperand(I, FCI->getOperand(1), F, &InsIndex2);
   if(!res2){
-    errs()<<"\nError !!! operand not found OP:"<<"\n";
+    errs()<<"handleFcmp: Error !!! metadata not found for op:"<<"\n";
+    FCI->getOperand(1)->dump();
     errs()<<"In Inst:"<<"\n";
     I->dump();
     exit(1);
