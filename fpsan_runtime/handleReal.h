@@ -115,11 +115,30 @@ struct temp_entry{
   bool is_init;
 };
 
+# if !defined(PREC_128) && !defined(PREC_256) && !defined(PREC_512) && !defined(PREC_1024) 
+#  define PREC_512
+# endif
+
+# if !defined(PRECISION) 
+# ifdef PREC_128
+#   define PRECISION 128
+# endif
+# ifdef PREC_256
+#   define PRECISION 256
+# endif
+# ifdef PREC_512
+#   define PRECISION 512
+# endif
+# ifdef PREC_1024
+#   define PRECISION 1024
+# endif
+#endif
+
 size_t * m_lock_key_map;
 smem_entry * m_shadow_stack;
 smem_entry ** m_shadow_memory;
 
-size_t m_precision = 0;
+size_t m_precision = PRECISION;
 
 size_t m_stack_top = 0;
 size_t m_timestamp = 0;
@@ -136,7 +155,6 @@ std::map<unsigned long long int, struct error_info> m_inst_error_map;
 size_t *frameCur;
 std::list <temp_entry*> m_expr;
 
-extern "C" void __init(size_t PRECISION);
 std::string m_get_string_opcode(size_t);
 unsigned long m_ulpd(double x, double y);
 unsigned long m_ulpf(float x, float y);

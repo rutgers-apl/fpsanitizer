@@ -966,10 +966,10 @@ void FPSanitizer::handleFuncMainInit(Function *F){
   Type* Int64Ty = Type::getInt64Ty(M->getContext());
 
   Constant* Prec = ConstantInt::get(Type::getInt64Ty(M->getContext()), Precision);
-  Finish = M->getOrInsertFunction("fpsan_init", VoidTy, Int64Ty);
+  Finish = M->getOrInsertFunction("fpsan_init", VoidTy);
   long TotIns = 0;
 
-  IRB.CreateCall(Finish, {Prec});
+  IRB.CreateCall(Finish);
 }
 
 void FPSanitizer::handleMainRet(Instruction *I, Function *F){ 
