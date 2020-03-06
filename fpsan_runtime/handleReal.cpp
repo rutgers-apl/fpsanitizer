@@ -90,7 +90,7 @@ extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRe
 
 
 
-extern "C" void fpsan_init(size_t precision) {
+extern "C" void fpsan_init() {
   if (!m_init_flag) {
     
     m_errfile = fopen ("error.log","w");
@@ -98,7 +98,6 @@ extern "C" void fpsan_init(size_t precision) {
     
     //printf("sizeof Real %lu", sizeof(struct smem_entry));
     m_init_flag = true;
-    m_precision = precision;
     size_t length = MAX_STACK_SIZE * sizeof(temp_entry);
     size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(temp_entry);
     m_shadow_stack =
