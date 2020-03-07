@@ -459,6 +459,9 @@ void handle_math_d(fp_op opCode, double op1d, temp_entry *op,
     case LOG:
       mpfr_log(res->val, op->val, MPFR_RNDN);
       break;
+    case LOG10:
+      mpfr_log10(res->val, op->val, MPFR_RNDN);
+      break;
     case ASIN: 
       mpfr_asin(res->val, op->val, MPFR_RNDN);
       break;
@@ -1475,6 +1478,15 @@ extern "C" void fpsan_mpfr_abs(temp_entry* op1, temp_entry* res,
 
 }
 
+extern "C" void fpsan_mpfr_log10(temp_entry* op1, temp_entry* res,
+			       double op1d, double computedRes,
+			       unsigned long long int instId,
+			       bool debugInfoAvail, unsigned int linenumber,
+			       unsigned int colnumber){
+
+  handle_math_d(LOG10, op1d, op1, computedRes, res, linenumber);
+
+}
 extern "C" void fpsan_mpfr_log(temp_entry* op1, temp_entry* res,
 			       double op1d, double computedRes,
 			       unsigned long long int instId,
