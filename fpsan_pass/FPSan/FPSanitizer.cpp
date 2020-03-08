@@ -14,44 +14,45 @@ static cl::opt<int> ENV("fpsan-with-type",
     cl::Hidden, cl::init(2));
 
 void FPSanitizer::addFunctionsToList(std::string FN) {
-	std::ofstream myfile;
-	myfile.open("functions.txt", std::ios::out|std::ios::app);
-	if (myfile.is_open()){
-		myfile <<FN;
-		myfile << "\n";
-		myfile.close();
-	}
+  std::ofstream myfile;
+  myfile.open("functions.txt", std::ios::out|std::ios::app);
+  if(isListedFunction(FN, "forbid.txt")) return;
+  if (myfile.is_open()){
+    myfile <<FN;
+    myfile << "\n";
+    myfile.close();
+  }
 }
 
 //check name of the function and check if it is in list of functions given by 
 //developer and return true else false.
 bool FPSanitizer::isListedFunction(StringRef FN, std::string FileName) {
-	std::ifstream infile(FileName);
-	std::string line;
-	while (std::getline(infile, line)) {
-		if (FN.compare(line) == 0){
-			return true;
-		}
-	}
-	return false;
+  std::ifstream infile(FileName);
+  std::string line;
+  while (std::getline(infile, line)) {
+    if (FN.compare(line) == 0){
+      return true;
+    }
+  }
+  return false;
 }
 
 bool FPSanitizer::isFloatType(Type *InsType){
-	if(InsType->getTypeID() == Type::DoubleTyID ||
-	   InsType->getTypeID() == Type::FloatTyID)
-		return true;
-	return false;
+  if(InsType->getTypeID() == Type::DoubleTyID ||
+      InsType->getTypeID() == Type::FloatTyID)
+    return true;
+  return false;
 }
 
 bool FPSanitizer::isFloat(Type *InsType){
-	if(InsType->getTypeID() == Type::FloatTyID)
-		return true;
-	return false;
+  if(InsType->getTypeID() == Type::FloatTyID)
+    return true;
+  return false;
 }
 bool FPSanitizer::isDouble(Type *InsType){
-	if(InsType->getTypeID() == Type::DoubleTyID)
-		return true;
-	return false;
+  if(InsType->getTypeID() == Type::DoubleTyID)
+    return true;
+  return false;
 }
 
 ConstantInt* FPSanitizer::GetInstId(Function *F, Instruction* I) {
@@ -59,7 +60,7 @@ ConstantInt* FPSanitizer::GetInstId(Function *F, Instruction* I) {
   MDNode* uniqueIdMDNode = I->getMetadata("fpsan_inst_id");
   if (uniqueIdMDNode == NULL) {
     return ConstantInt::get(Type::getInt64Ty(M->getContext()), 0);
-//    exit(1);
+    //    exit(1);
   }
 
   Metadata* uniqueIdMetadata = uniqueIdMDNode->getOperand(0).get();
@@ -515,6 +516,71 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             }
           }
         }
+        else{//indirect
+          if(isFloatType(CI->getType())){
+            if(index-1 > TotalAlloca){
+              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
+            }
+            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+
+            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
+
+
+            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
+            IRB.CreateCall(FuncInit, {BOGEP});
+
+            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+            IRBE.CreateCall(FuncInit, {BOGEP});
+
+            index++;
+          }
+          size_t NumOperands = CI->getNumArgOperands();
+          Value *Op[NumOperands];
+          Type *OpTy[NumOperands];
+          bool Op1Call[NumOperands];
+          for(int i = 0; i < NumOperands; i++){
+            Op[i] = CI->getArgOperand(i);
+            OpTy[i] = Op[i]->getType(); // this should be of float
+            Op1Call[i] = false;
+
+            //handle function call which take as operand another function call,
+            //but that function is not defined. It then should be treated a constant.
+            if(isa<ConstantFP>(Op[i])){
+              if(index-1 > TotalAlloca){
+                errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
+              }
+              Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+                ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+              Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+
+              GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op[i]), BOGEP));
+
+
+              FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
+              IRB.CreateCall(FuncInit, {BOGEP});
+
+              if(isFloat(Op[i]->getType())){
+
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
+              }
+              else if(isDouble(Op[i]->getType())){
+
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
+              }
+
+              IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
+              ConsMap.insert(std::pair<Value*, Value*>(Op[i], BOGEP));
+
+
+              FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+              IRBE.CreateCall(FuncInit, {BOGEP});
+
+              index++;
+            }
+          }
+        }
       }
       else if (FCmpInst *FCI = dyn_cast<FCmpInst>(&I)){
         if(isFloatType(I.getType())){
@@ -667,8 +733,42 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
           Value *IncValue = PN->getIncomingValue(PI);
 
           if (IncValue == PN) continue; //TODO
-          if(isa<ConstantFP>(IncValue))
-            if(isa<ConstantFP>(IncValue)){
+          if(isa<ConstantFP>(IncValue)){
+            if(index-1 > TotalAlloca){
+              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
+            }
+            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+
+            GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(IncValue), BOGEP));
+
+            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
+            IRB.CreateCall(FuncInit, {BOGEP});
+
+            if(isFloat(IncValue->getType())){
+
+              FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, IncValue->getType(), Int32Ty);
+            }
+            else if(isDouble(IncValue->getType())){
+
+              FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, IncValue->getType(), Int32Ty);
+            }
+            IRB.CreateCall(FuncInit, {BOGEP, IncValue, lineNumber});
+            ConsMap.insert(std::pair<Value*, Value*>(IncValue, BOGEP));
+
+            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+            IRBE.CreateCall(FuncInit, {BOGEP});
+
+            index++;
+          }
+        }
+      }
+      if(ReturnInst *RT = dyn_cast<ReturnInst>(&I)){
+        if (RT->getNumOperands() != 0){
+          Value *Op = RT->getOperand(0);
+          if(isFloatType(Op->getType())){
+            if(isa<ConstantFP>(Op)){
               if(index-1 > TotalAlloca){
                 errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
               }
@@ -676,27 +776,26 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                 ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
               Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
 
-              GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(IncValue), BOGEP));
+              GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op), BOGEP));
 
               FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
               IRB.CreateCall(FuncInit, {BOGEP});
 
-              if(isFloat(IncValue->getType())){
-
-                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, IncValue->getType(), Int32Ty);
+              if(isFloat(Op->getType())){
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, Op->getType(), Int32Ty);
               }
-              else if(isDouble(IncValue->getType())){
-
-                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, IncValue->getType(), Int32Ty);
+              else if(isDouble(Op->getType())){
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, Op->getType(), Int32Ty);
               }
-              IRB.CreateCall(FuncInit, {BOGEP, IncValue, lineNumber});
-              ConsMap.insert(std::pair<Value*, Value*>(IncValue, BOGEP));
+              IRB.CreateCall(FuncInit, {BOGEP, Op, lineNumber});
+              ConsMap.insert(std::pair<Value*, Value*>(Op, BOGEP));
 
               FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
               IRBE.CreateCall(FuncInit, {BOGEP});
 
               index++;
             }
+          }
         }
       }
     }
@@ -860,6 +959,23 @@ long FPSanitizer::getTotalFPInst(Function *F){
           }
 
         }
+        else{//indirect
+          if(isFloatType(CI->getType())){
+            TotalAlloca++;
+          }
+          size_t NumOperands = CI->getNumArgOperands();
+          Value *Op[NumOperands];
+          Type *OpTy[NumOperands];
+          bool Op1Call[NumOperands];
+          for(int i = 0; i < NumOperands; i++){
+            Op[i] = CI->getArgOperand(i);
+            OpTy[i] = Op[i]->getType(); // this should be of float
+
+            if(isa<ConstantFP>(Op[i])){
+              TotalAlloca++;
+            }
+          }
+        }
       }
       else if (FCmpInst *FCI = dyn_cast<FCmpInst>(&I)){
         if(isFloatType(I.getType())){
@@ -895,10 +1011,21 @@ long FPSanitizer::getTotalFPInst(Function *F){
             }
         }
       }
+      else if(ReturnInst *RT = dyn_cast<ReturnInst>(&I)){
+        if (RT->getNumOperands() != 0){
+          Value *Op = RT->getOperand(0);
+          if(isFloatType(Op->getType())){
+            if(isa<ConstantFP>(Op)){
+              TotalAlloca++;
+            }
+          }
+        }
+      }
     }
   }
   return TotalAlloca;
 }
+
 void FPSanitizer::createMpfrAlloca(Function *F){
   long TotalArg = 1;
   long TotalAlloca = 0;
@@ -922,7 +1049,7 @@ Instruction*
 FPSanitizer::getNextInstruction(Instruction *I, BasicBlock *BB){
   Instruction *Next;
   for (BasicBlock::iterator BBit = BB->begin(), BBend = BB->end();
-       BBit != BBend; ++BBit) {
+      BBit != BBend; ++BBit) {
     Next = &*BBit;
     if(I == Next){
       Next = &*(++BBit);
@@ -935,11 +1062,11 @@ FPSanitizer::getNextInstruction(Instruction *I, BasicBlock *BB){
 Instruction*
 FPSanitizer::getNextInstructionNotPhi(Instruction *I, BasicBlock *BB){
   Instruction *Next;
-    for (auto &I : *BB) {
-      if(!isa<PHINode>(I)){
-        Next = &I;
-        break;
-      }
+  for (auto &I : *BB) {
+    if(!isa<PHINode>(I)){
+      Next = &I;
+      break;
+    }
   }
   return Next;
 }
@@ -983,9 +1110,8 @@ void FPSanitizer::handleMainRet(Instruction *I, Function *F){
 
 void
 FPSanitizer::handleCallInst (CallInst *CI,
-				BasicBlock *BB,
-				Function *F,
-				std::string CallName) {
+    BasicBlock *BB,
+    Function *F) {
 
   Instruction *I = dyn_cast<Instruction>(CI);
   Module *M = F->getParent();
@@ -993,12 +1119,11 @@ FPSanitizer::handleCallInst (CallInst *CI,
   IRBuilder<> IRBN(Next);
   IRBuilder<> IRB(I);
 
-  Function *Callee = CI->getCalledFunction();
 
   Type* Int64Ty = Type::getInt64Ty(M->getContext());
   Type* VoidTy = Type::getVoidTy(M->getContext());
 
-  if(isFloatType(Callee->getReturnType())){
+  if(isFloatType(CI->getType())){
     long InsIndex;
     Value *BOGEP = GEPMap.at(CI);
     FuncInit = M->getOrInsertFunction("fpsan_get_return", VoidTy, MPtrTy);
@@ -1054,17 +1179,17 @@ void FPSanitizer::handleFuncInit(Function *F){
 
 void
 FPSanitizer::handleMathLibFunc (CallInst *CI,
-				BasicBlock *BB,
-				Function *F,
-				std::string CallName) {
+    BasicBlock *BB,
+    Function *F,
+    std::string CallName) {
 
   Instruction *I = dyn_cast<Instruction>(CI);
   Instruction *Next = getNextInstruction(dyn_cast<Instruction>(CI), BB);
   IRBuilder<> IRB(Next);
   Module *M = F->getParent();
-  
+
   Type* VoidTy = Type::getVoidTy(M->getContext());
-  
+
   IntegerType* Int32Ty = Type::getInt32Ty(M->getContext());
   IntegerType* Int1Ty = Type::getInt1Ty(M->getContext());
   Type* Int64Ty = Type::getInt64Ty(M->getContext());
@@ -1091,7 +1216,7 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
   Value *BOGEP = GEPMap.at(I);
 
   Value *Index1;
-  
+
   size_t NumOperands = CI->getNumArgOperands();
   Value *Op[NumOperands];
   Type *OpTy[NumOperands];
@@ -1101,7 +1226,7 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
 
   std::string funcName;
 
-  
+
   if(CallName == "llvm.ceil.f64"){
     funcName = "fpsan_mpfr_llvm_ceil";
   }
@@ -1159,27 +1284,27 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
 bool FPSanitizer::handleOperand(Instruction *I, Value* OP, Function *F, Value** ConsInsIndex){
   Module *M = F->getParent();
   long Idx = 0;
-	
+
   IRBuilder<> IRB(I);
   Instruction *OpIns = dyn_cast<Instruction>(OP);	
   Type* Int64Ty = Type::getInt64Ty(M->getContext());
 
   if(ConsMap.count(OP) != 0){
     *ConsInsIndex = ConsMap.at(OP);
-     return true;
+    return true;
   }
   else if(isa<PHINode>(OP)){
     *ConsInsIndex = GEPMap.at(dyn_cast<Instruction>(OP));
-     return true;
+    return true;
   }
   else if(MInsMap.count(dyn_cast<Instruction>(OP)) != 0){
     *ConsInsIndex = MInsMap.at(dyn_cast<Instruction>(OP));
-     return true;
+    return true;
   }
   else if(isa<Argument>(OP) && (ArgMap.count(dyn_cast<Argument>(OP)) != 0)){
     Idx =  ArgMap.at(dyn_cast<Argument>(OP));
     *ConsInsIndex = MArgMap.at(dyn_cast<Argument>(OP));
-     return true;
+    return true;
   }
   else if(isa<FPTruncInst>(OP) || isa<FPExtInst>(OP)){
     Value *OP1 = OpIns->getOperand(0);
@@ -1252,7 +1377,7 @@ void FPSanitizer::handleStore(StoreInst *SI, BasicBlock *BB, Function *F){
   //TODO: do we need to check for bitcast for store?
   BitCastInst*
     BCToAddr = new BitCastInst(Addr, 
-			       PointerType::getUnqual(Type::getInt8Ty(M->getContext())),"", I);
+        PointerType::getUnqual(Type::getInt8Ty(M->getContext())),"", I);
   if (BitCastInst *BI = dyn_cast<BitCastInst>(Addr)){
     BTFlag = checkIfBitcastFromFP(BI);
   }
@@ -1266,12 +1391,12 @@ void FPSanitizer::handleStore(StoreInst *SI, BasicBlock *BB, Function *F){
     else{
       if(isFloat(StoreTy)){
         SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow_fconst",
-					     VoidTy, PtrVoidTy, OpTy, Int32Ty);
+            VoidTy, PtrVoidTy, OpTy, Int32Ty);
         IRB.CreateCall(SetRealTemp, {BCToAddr, OP, lineNumber});
       }
       else if(isDouble(StoreTy)){
         SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow_dconst",
-					     VoidTy, PtrVoidTy, OpTy, Int32Ty);
+            VoidTy, PtrVoidTy, OpTy, Int32Ty);
         IRB.CreateCall(SetRealTemp, {BCToAddr, OP, lineNumber});
       }
     }
@@ -1361,7 +1486,7 @@ void FPSanitizer::handleSelect(SelectInst *SI, BasicBlock *BB, Function *F){
 
   Value *NewOp2 = dyn_cast<Value>(InsIndex2); 
   Value *NewOp3 = dyn_cast<Value>(InsIndex3);
- 
+
   Type* FCIOpType = SI->getOperand(0)->getType();
 
   Value *Select = IRB.CreateSelect(OP1, NewOp2, NewOp3); 
@@ -1471,15 +1596,15 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
 
   if(isFloat(BO->getType())){
     ComputeReal = M->getOrInsertFunction("fpsan_mpfr_"+opName+"_f", VoidTy, MPtrTy, MPtrTy, MPtrTy, BOType, BOType,
-					 BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
+        BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
   }
   else if(isDouble(BO->getType())){
     ComputeReal = M->getOrInsertFunction("fpsan_mpfr_"+opName, VoidTy, MPtrTy, MPtrTy, MPtrTy, BOType, BOType,
-					 BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
+        BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
   }
 
   IRB.CreateCall(ComputeReal, {InsIndex1, InsIndex2, BOGEP, BO->getOperand(0), BO->getOperand(1), BO, 
-	        instId, debugInfoAvailable, lineNumber, colNumber});
+      instId, debugInfoAvailable, lineNumber, colNumber});
   MInsMap.insert(std::pair<Instruction*, Instruction*>(I, dyn_cast<Instruction>(BOGEP)));
   FuncInit = M->getOrInsertFunction("fpsan_check_error", VoidTy, MPtrTy, BOType);
   IRB.CreateCall(FuncInit, {BOGEP, BO});
@@ -1533,13 +1658,13 @@ void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
   Constant* OpCode = ConstantInt::get(Type::getInt64Ty(M->getContext()), FCI->getPredicate());
   if(isFloat(FCIOpType))
     CheckBranch = M->getOrInsertFunction("fpsan_check_branch_f", Int1Ty, FCIOpType, MPtrTy, FCIOpType, 
-				       MPtrTy, Int64Ty, Int1Ty, Int32Ty);
+        MPtrTy, Int64Ty, Int1Ty, Int32Ty);
   else if(isDouble(FCIOpType)){
     CheckBranch = M->getOrInsertFunction("fpsan_check_branch_d", Int1Ty, FCIOpType, MPtrTy, FCIOpType, 
-				       MPtrTy, Int64Ty, Int1Ty, Int32Ty);
+        MPtrTy, Int64Ty, Int1Ty, Int32Ty);
   }
   IRB.CreateCall(CheckBranch, {FCI->getOperand(0), InsIndex1, FCI->getOperand(1), InsIndex2, 
-	OpCode, I, lineNumber});
+      OpCode, I, lineNumber});
 }
 
 bool FPSanitizer::checkIfBitcastFromFP(BitCastInst *BI){
@@ -1556,7 +1681,7 @@ bool FPSanitizer::checkIfBitcastFromFP(BitCastInst *BI){
     int num = STyL->getNumElements();
     for(int i = 0; i < num; i++) {
       if(isFloatType(STyL->getElementType(i)))
-	      BTFlag = true;
+        BTFlag = true;
     }
   }
   return BTFlag;
@@ -1622,9 +1747,9 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
       case Instruction::FSub:
       case Instruction::FMul:
       case Instruction::FDiv:
-	{
-	  handleBinOp(BO, BB, F);
-	} 
+        {
+          handleBinOp(BO, BB, F);
+        } 
     }
   }
   else if (CallInst *CI = dyn_cast<CallInst>(I)){
@@ -1632,10 +1757,19 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
     if (Callee) {
       if(isListedFunction(Callee->getName(), "mathFunc.txt"))
         handleMathLibFunc(CI, BB, F, Callee->getName());
-      else if(isListedFunction(Callee->getName(), "functions.txt"))
-        handleCallInst(CI, BB, F, Callee->getName());
+      else if(isListedFunction(Callee->getName(), "functions.txt")){
+        handleCallInst(CI, BB, F);
+      }
     }
-  }
+    else if(CallSite(I).isIndirectCall()){
+      llvm::errs()<<"float type\n";
+      handleCallInst(CI, BB, F);
+      // long TotalFPInst = getTotalFPInst(CI->getCalledFunction()); 
+      // if(TotalFPInst > 0){
+      //  handleCallInst(CI, BB, F);
+      //  }
+    }
+  }     
 }
 
 bool FPSanitizer::runOnModule(Module &M) {
@@ -1645,44 +1779,44 @@ bool FPSanitizer::runOnModule(Module &M) {
 
   StructType* MPFRTy1 = StructType::create(M.getContext(), "struct.fpsan_mpfr");
   MPFRTy1->setBody({Type::getInt64Ty(M.getContext()), Type::getInt32Ty(M.getContext()),
-        Type::getInt64Ty(M.getContext()), Type::getInt64PtrTy(M.getContext())});
-  
+      Type::getInt64Ty(M.getContext()), Type::getInt64PtrTy(M.getContext())});
+
   MPFRTy = StructType::create(M.getContext(), "struct.f_mpfr");
   MPFRTy->setBody(llvm::ArrayType::get(MPFRTy1, 1));
-  
+
   Real = StructType::create(M.getContext(), "struct.temp_entry");
   RealPtr = Real->getPointerTo();
   Real->setBody({MPFRTy,
-	Type::getDoubleTy(M.getContext()),
-	Type::getInt32Ty(M.getContext()),
-	Type::getInt32Ty(M.getContext()),
-	
-	Type::getInt64Ty(M.getContext()),
-	Type::getInt64Ty(M.getContext()),
-	Type::getInt64Ty(M.getContext()),
-	Type::getInt64Ty(M.getContext()),
-	RealPtr,
-	
-	Type::getInt64Ty(M.getContext()),
-	Type::getInt64Ty(M.getContext()),
-	RealPtr,
-	
-	Type::getInt32Ty(M.getContext()),
-	Type::getInt64Ty(M.getContext()),
-	Type::getInt1Ty(M.getContext())});
+      Type::getDoubleTy(M.getContext()),
+      Type::getInt32Ty(M.getContext()),
+      Type::getInt32Ty(M.getContext()),
+
+      Type::getInt64Ty(M.getContext()),
+      Type::getInt64Ty(M.getContext()),
+      Type::getInt64Ty(M.getContext()),
+      Type::getInt64Ty(M.getContext()),
+      RealPtr,
+
+      Type::getInt64Ty(M.getContext()),
+      Type::getInt64Ty(M.getContext()),
+      RealPtr,
+
+      Type::getInt32Ty(M.getContext()),
+      Type::getInt64Ty(M.getContext()),
+      Type::getInt1Ty(M.getContext())});
 
   MPtrTy = Real->getPointerTo();
-  
-  
+
+
   //TODO::Iterate over global arrays to initialize shadow memory
   for (Module::global_iterator GVI = M.global_begin(), E = M.global_end();
-               GVI != E; ) {
+      GVI != E; ) {
     GlobalVariable *GV = &*GVI++;
-//    if(isFloatType(GV->getType())){
-      if(GV->hasInitializer()){
-        Constant *Init = GV->getInitializer();
-      }
-  //  }
+    //    if(isFloatType(GV->getType())){
+    if(GV->hasInitializer()){
+      Constant *Init = GV->getInitializer();
+    }
+    //  }
   }
   // Find functions that perform floating point computation. No
   // instrumentation if the function does not perform any FP
@@ -1727,7 +1861,7 @@ bool FPSanitizer::runOnModule(Module &M) {
         MDNode* md = MDNode::get(instContext, uniqueId);
         I.setMetadata("fpsan_inst_id", md);
         instId++;
-         if(PHINode *PN = dyn_cast<PHINode>(&I)){
+        if(PHINode *PN = dyn_cast<PHINode>(&I)){
           if(isFloatType(I.getType())){
             handlePhi(PN, &BB, F);
             LastPhi = &I;
@@ -1738,8 +1872,10 @@ bool FPSanitizer::runOnModule(Module &M) {
     }
     for (auto &BB : *F) {
       for (auto &I : BB) {
-        if (ReturnInst *RI = dyn_cast<ReturnInst>(&I)){
-          handleReturn(RI, &BB, F);
+        if(F->getName() != "main"){
+          if (ReturnInst *RI = dyn_cast<ReturnInst>(&I)){
+            handleReturn(RI, &BB, F);
+          }
         }
       }
     }
@@ -1765,8 +1901,8 @@ bool FPSanitizer::runOnModule(Module &M) {
       }
     }
   } 
-//  M.dump();
- 
+  //  M.dump();
+
   return true;
 }
 
@@ -1777,9 +1913,9 @@ void addFPPass(const PassManagerBuilder &Builder, legacy::PassManagerBase &PM) {
 }
 
 RegisterStandardPasses SOpt(PassManagerBuilder::EP_OptimizerLast,
-			    addFPPass);
+    addFPPass);
 RegisterStandardPasses S(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                         addFPPass);
+    addFPPass);
 
 char FPSanitizer::ID = 0;
 static const RegisterPass<FPSanitizer> Y("fpsan", "instrument fp operations", false, false);
