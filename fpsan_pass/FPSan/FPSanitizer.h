@@ -51,7 +51,7 @@ namespace {
     void handleLoad(LoadInst *LI, BasicBlock *BB, Function *F);
     void handleMathLibFunc(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
     void handlePositLibFunc(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
-		void handleCallInst (CallInst *CI, BasicBlock *BB, Function *F, std::string CallName);
+		void handleCallInst (CallInst *CI, BasicBlock *BB, Function *F);
     bool isListedFunction(StringRef FN, std::string FileName);
     void addFunctionsToList(std::string FN);
     bool isFloatType(Type *InsType);
@@ -82,8 +82,6 @@ namespace {
     std::map<Function*, size_t> FuncTotalArg;
     //list of all functions need to be instrumented
     SmallVector<Function*, 8> AllFuncList;
-    SmallVector<Value*, 8> AllocaInstList;
-    SmallVector<Argument*, 8> ArgList;
     static char ID; // Pass identification
     long InsCount = 0;
 
