@@ -2,6 +2,7 @@
 
 // fpsan_trace: a function that user can set a breakpoint on to
 // generate DAGs
+#ifdef TRACING
 extern "C" void fpsan_trace(temp_entry *current){
   m_expr.push_back(current);
   int level;
@@ -45,7 +46,7 @@ extern "C" void fpsan_trace(temp_entry *current){
   int depth = m_get_depth(current);
   std::cout<<"depth:"<<depth<<"\n";
 }
-
+#endif
 
 
 // fpsan_check_branch, fpsan_check_conversion, fpsan_check_error are
@@ -69,6 +70,8 @@ extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
 }
 
 extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRes){
+
+#ifdef TRACING  
   if(debugtrace){
     std::cout<<"m_expr starts\n";
     m_expr.clear();
@@ -76,18 +79,19 @@ extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRe
     std::cout<<"\nm_expr ends\n";
     std::cout<<"\n";
   }
-  if(realRes->error > ERRORTHRESHOLD4)
-    return 4;
-  else if(realRes->error > ERRORTHRESHOLD3) //With shadow execution
-    return 3;
-  else if(realRes->error > ERRORTHRESHOLD2) //With shadow execution
-    return 2;
-  else if(realRes->error > ERRORTHRESHOLD1) //With shadow execution
-    return 1;
+
+  
+  if(realRes->error > ERRORTHRESHOLD)
+    return 4; 
   return 0;
+#else
+  int bits_error = m_update_error(realRes, computedRes);
+  if(bits_error > ERRORTHRESHOLD)
+    return 4;
+
+  return 0;
+#endif   
 }
-
-
 
 
 extern "C" void fpsan_init() {
@@ -99,21 +103,28 @@ extern "C" void fpsan_init() {
     //printf("sizeof Real %lu", sizeof(struct smem_entry));
     m_init_flag = true;
     size_t length = MAX_STACK_SIZE * sizeof(temp_entry);
-    size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(temp_entry);
+
+    size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(smem_entry);
     m_shadow_stack =
       (smem_entry *)mmap(0, length, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
+#ifdef TRACING
     m_lock_key_map =
       (size_t *)mmap(0, length, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
+    assert(m_lock_key_map != (void *)-1);
+#endif    
+
     m_shadow_memory =
       (smem_entry **)mmap(0, memLen, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
-    assert(m_lock_key_map != (void *)-1);
+
     assert(m_shadow_stack != (void *)-1);
     assert(m_shadow_memory != (void *)-1);
 
+#ifdef TRACING    
     m_key_stack_top = 1;
     m_key_counter = 1;
 
     m_lock_key_map[m_key_stack_top] = m_key_counter;
+#endif    
 
     for(int i =0; i<MAX_STACK_SIZE; i++){
       mpfr_init2(m_shadow_stack[i].val, m_precision);
@@ -130,8 +141,11 @@ void m_set_mpfr(mpfr_t *val1, mpfr_t *val2) {
 extern "C" void fpsan_init_mpfr(temp_entry *op) {
 
   mpfr_init2(op->val, m_precision);
+
+#ifdef TRACING  
   op->lock = m_key_stack_top;
   op->key = m_lock_key_map[m_key_stack_top];
+#endif  
 
 }
 
@@ -158,12 +172,16 @@ int m_isnan(mpfr_t real){
 void m_store_shadow_dconst(smem_entry *op, double d, unsigned int linenumber) {
 
   mpfr_set_d(op->val, d, MPFR_RNDN);
+
+#ifdef TRACING  
   op->lock = m_key_stack_top;
   op->key = m_lock_key_map[m_key_stack_top];
   op->error = 0;
+  op->tmp_ptr = NULL;
+#endif
+  
   op->lineno = linenumber;
   op->opcode = CONSTANT;
-  op->tmp_ptr = NULL;
   op->computed = d;
 
 }
@@ -171,12 +189,15 @@ void m_store_shadow_dconst(smem_entry *op, double d, unsigned int linenumber) {
 void m_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
 
   mpfr_set_flt(op->val, f, MPFR_RNDN);
+#ifdef TRACING  
   op->lock = m_key_stack_top;
   op->key = m_lock_key_map[m_key_stack_top];
   op->error = 0;
+  op->tmp_ptr = NULL;
+#endif
+  
   op->lineno = linenumber;
   op->opcode = CONSTANT;
-  op->tmp_ptr = NULL;
   op->computed = f;
 
 }
@@ -184,6 +205,8 @@ void m_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
 extern "C" void fpsan_store_tempmeta_dconst(temp_entry *op, double d, unsigned int linenumber) {
 
   mpfr_set_d(op->val, d, MPFR_RNDN);
+
+#ifdef TRACING  
   op->lock = m_key_stack_top;
   op->key = m_lock_key_map[m_key_stack_top];
   op->op1_lock = 0;
@@ -193,9 +216,11 @@ extern "C" void fpsan_store_tempmeta_dconst(temp_entry *op, double d, unsigned i
   op->lhs = NULL;
   op->rhs = NULL;
   op->error = 0;
+  op->timestamp = m_timestamp++;
+#endif
+  
   op->lineno = linenumber;
   op->opcode = CONSTANT;
-  op->timestamp = m_timestamp++;
   op->computed = d;
 
 }
@@ -203,6 +228,8 @@ extern "C" void fpsan_store_tempmeta_dconst(temp_entry *op, double d, unsigned i
 extern "C" void fpsan_store_tempmeta_fconst(temp_entry *op, float f, unsigned int linenumber) {
 
   mpfr_set_flt(op->val, f, MPFR_RNDN);
+
+#ifdef TRACING  
   op->lock = m_key_stack_top;
   op->key = m_lock_key_map[m_key_stack_top];
   op->op1_lock = 0;
@@ -212,9 +239,11 @@ extern "C" void fpsan_store_tempmeta_fconst(temp_entry *op, float f, unsigned in
   op->lhs = NULL;
   op->rhs = NULL;
   op->error = 0;
+  op->timestamp = m_timestamp++;
+#endif
+  
   op->lineno = linenumber;
   op->opcode = CONSTANT;
-  op->timestamp = m_timestamp++;
   op->computed = f;
 
 }
@@ -299,13 +328,16 @@ extern "C" void fpsan_store_shadow(void* toAddr, temp_entry* src){
   /*copy val*/
   m_set_mpfr(&(dest->val), &(src->val));
   /*copy everything else except res key and opcode*/
+#ifdef TRACING  
   dest->error = src->error;
-  dest->lineno = src->lineno;
-  dest->computed = src->computed;
   dest->lock = m_key_stack_top; 
   dest->key = m_lock_key_map[m_key_stack_top]; 
-  dest->is_init = true;
   dest->tmp_ptr = src;
+#endif  
+
+  dest->is_init = true;
+  dest->lineno = src->lineno;
+  dest->computed = src->computed;
   dest->opcode = src->opcode;
 
 }
@@ -324,14 +356,18 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
 
   /* copy the metadata from shadow memory to temp metadata*/
   m_set_mpfr(&(src->val), &(dest->val));
+#ifdef TRACING  
   src->lock = m_key_stack_top; 
   src->key = m_lock_key_map[m_key_stack_top];
   src->error = dest->error;
+#endif
+  
   src->lineno = dest->lineno;
   src->computed = dest->computed;
   src->opcode = dest->opcode;
 
 
+#ifdef TRACING  
   /* if the temp metadata is not available (i.e, the function
      producing the value has returned), then treat the value loaded
      from the shadow memory as a constant from the perspective of
@@ -354,6 +390,9 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
     /* No trace information available, treat like a constant */
     if(debug)
       std::cout<<"__load_d copying default\n";
+
+#if 0    
+    /* This looks redundant with fpsan_store_tempmeta_fconst operations */
     src->op1_lock = 0;
     src->op1_key = 0;
     src->op2_lock = 0;
@@ -361,8 +400,11 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
     src->lhs = NULL;
     src->rhs = NULL;
     src->timestamp = m_timestamp++;
+#endif    
     fpsan_store_tempmeta_fconst(src, d, 0); //for global variables
   }
+#endif
+  
 }
 
 extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
@@ -378,13 +420,15 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
   smem_entry* dest = m_get_shadowaddress(AddrInt);
 
   m_set_mpfr(&(src->val), &(dest->val));
-
-  src->lock = m_key_stack_top; 
-  src->key = m_lock_key_map[m_key_stack_top];
-  src->error = dest->error;
   src->lineno = dest->lineno;
   src->computed = dest->computed;
   src->opcode = dest->opcode;
+
+
+#ifdef TRACING  
+  src->lock = m_key_stack_top; 
+  src->key = m_lock_key_map[m_key_stack_top];
+  src->error = dest->error;
 
   /* if the temp metadata is not available (i.e, the function
      producing the value has returned), then treat the value loaded
@@ -404,6 +448,8 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
   else{
     if(debug)
       std::cout<<"__load_d copying default\n";
+#if 0
+    /* This looks redundant with fpsan_store_tempmeta_fconst operations */
     src->op1_lock = 0;
     src->op1_key = 0;
     src->op2_lock = 0;
@@ -411,8 +457,11 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
     src->lhs = NULL;
     src->rhs = NULL;
     src->timestamp = m_timestamp++;
+#endif    
     fpsan_store_tempmeta_dconst(src, d, 0); //for global variables
   }
+#endif
+  
 }
 
 void handle_math_d(fp_op opCode, double op1d, temp_entry *op, 
@@ -478,6 +527,7 @@ void handle_math_d(fp_op opCode, double op1d, temp_entry *op,
   if (computedResd != computedResd)
     nanCount++;
 
+#ifdef TRACING  
   int bitsError = m_update_error(res, computedResd);
   res->op1_lock = op->lock;
   res->op1_key = m_lock_key_map[op->lock];
@@ -487,9 +537,11 @@ void handle_math_d(fp_op opCode, double op1d, temp_entry *op,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op;
   res->rhs = nullptr;
-  res->lineno = linenumber;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
+#endif
+  
+  res->lineno = linenumber;
   res->opcode = opCode;
   res->computed = computedResd;
 }
@@ -530,6 +582,8 @@ void m_compute(fp_op opCode, double op1d,
     m_print_real(res->val);
     printf("compute: res:%p\n", res);
   }
+
+#ifdef TRACING  
   int bitsError = m_update_error(res, computedResd);
   res->op1_lock = op1->lock;
   res->op2_lock = op2->lock;
@@ -539,9 +593,11 @@ void m_compute(fp_op opCode, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1;
   res->rhs = op2;
-  res->lineno = lineNo;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
+#endif
+  
+  res->lineno = lineNo;
   res->opcode = opCode;
   res->computed = computedResd;
 }
@@ -822,6 +878,7 @@ std::string m_get_string_opcode(size_t opcode){
   }
 }
 
+#ifdef TRACING
 int m_get_depth(temp_entry *current){
   int depth = 0;
   m_expr.push_back(current);
@@ -857,22 +914,31 @@ int m_get_depth(temp_entry *current){
   }
   return depth;
 }
-
+#endif
 
 extern "C" void fpsan_func_init(long totalArgs) {
 
+#ifdef TRACING  
   m_key_stack_top++;
   m_key_counter++;
   m_lock_key_map[m_key_stack_top] = m_key_counter;
+#endif
+  
   m_stack_top = m_stack_top + totalArgs;
+
+  
 }
 
 extern "C" void fpsan_func_exit(long totalArgs) {
-
+  
+#ifdef TRACING
   m_lock_key_map[m_key_stack_top] = 0;
   m_key_stack_top--;
+#endif  
 
   m_stack_top = m_stack_top - totalArgs;
+
+  
 }
 
 /* Copy the metadata of the return value of the function and insert
@@ -880,7 +946,7 @@ extern "C" void fpsan_func_exit(long totalArgs) {
    by the caller. This happens in the callee. */
 
 extern "C" void fpsan_set_return(temp_entry* src, size_t totalArgs, double op) {
-
+  
   /* Santosh: revisit this design, make 0 distance from the stack top
      as the return */
 
@@ -888,12 +954,16 @@ extern "C" void fpsan_set_return(temp_entry* src, size_t totalArgs, double op) {
   if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
+    dest->opcode = src->opcode;
+    dest->lineno = src->lineno;
+
+#ifdef TRACING    
     dest->error = src->error;
     dest->lock = m_key_stack_top;
     dest->key = m_lock_key_map[m_key_stack_top];
-    dest->lineno = src->lineno;
-    dest->opcode = src->opcode;
     dest->tmp_ptr = src;
+#endif
+    
   }
   else{
     std::cout<<"__set_return copying src is null:"<<"\n";
@@ -903,8 +973,12 @@ extern "C" void fpsan_set_return(temp_entry* src, size_t totalArgs, double op) {
   /*  one of set_return or func_exit is called, so cleanup the
       shadow stack */
   m_stack_top = m_stack_top - totalArgs;
+
+#ifdef TRACING  
   m_lock_key_map[m_key_stack_top] = 0;
   m_key_stack_top--;
+#endif
+  
 }
 
 /* Retrieve the metadata for the return value from the shadow
@@ -913,13 +987,16 @@ extern "C" void fpsan_get_return(temp_entry* dest) {
 
   smem_entry *src = &(m_shadow_stack[m_stack_top]); //save return m_stack_top - totalArgs 
   m_set_mpfr(&(dest->val), &(src->val));
+  dest->computed = src->computed;
+  dest->lineno = src->lineno;
+  dest->opcode = src->opcode;
+
+#ifdef TRACING  
   dest->lock = m_key_stack_top;
   dest->key = m_lock_key_map[m_key_stack_top];
-  dest->computed = src->computed;
   dest->error = src->error;
-  dest->lineno = src->lineno;
   dest->timestamp = m_timestamp++;
-  dest->opcode = src->opcode;
+
 
   if(m_lock_key_map[src->lock] == src->key){
 
@@ -938,6 +1015,7 @@ extern "C" void fpsan_get_return(temp_entry* dest) {
     dest->lhs = 0;
     dest->rhs = 0;
   }
+#endif  
 
 }
 
@@ -946,9 +1024,11 @@ extern "C" void fpsan_get_return(temp_entry* dest) {
 extern "C" temp_entry* fpsan_get_arg(size_t argIdx, double op) {
 
   smem_entry *dst = &(m_shadow_stack[m_stack_top-argIdx]);
-  
+
+#ifdef TRACING  
   dst->tmp_ptr->lock = m_key_stack_top;
   dst->tmp_ptr->key = m_lock_key_map[m_key_stack_top];
+#endif  
 
   if(!dst->is_init){ //caller maybe is not instrumented for set_arg
     m_store_shadow_dconst(dst, op, 0);
@@ -965,13 +1045,17 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
   /* Santosh: Check if we will ever have src == NULL with arguments */
   if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
-    dest->lock = m_key_stack_top;
-    dest->key = m_lock_key_map[m_key_stack_top];
     dest->computed = src->computed;
-    dest->error = src->error;
     dest->lineno = src->lineno;
     dest->is_init = true;
+
+#ifdef TRACING    
+    dest->lock = m_key_stack_top;
+    dest->key = m_lock_key_map[m_key_stack_top];
+    dest->error = src->error;
     dest->tmp_ptr = src;
+#endif
+    
   }
   else{
     
@@ -989,13 +1073,17 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
   /* Santosh: Check if we will ever have src == NULL with arguments */
   if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
-    dest->lock = m_key_stack_top;
-    dest->key = m_lock_key_map[m_key_stack_top];
     dest->computed = src->computed;
-    dest->error = src->error;
     dest->lineno = src->lineno;
     dest->is_init = true;
+
+#ifdef TRACING    
+    dest->lock = m_key_stack_top;
+    dest->key = m_lock_key_map[m_key_stack_top];
+    dest->error = src->error;
     dest->tmp_ptr = src;
+#endif
+    
   }
   else{
 
@@ -1003,6 +1091,8 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
     dest->is_init = true;
   }
 }
+
+#ifdef TRACING
 
 void m_print_error(size_t opcode, temp_entry * real,
 		 double d_value, unsigned int cbad,
@@ -1028,7 +1118,9 @@ void m_print_error(size_t opcode, temp_entry * real,
       m_inst_error_map[instId].cbad = cbad;
     }
   } 
-} 
+}
+
+#endif
 
 
 unsigned long m_ulpd(double x, double y) {
@@ -1269,7 +1361,11 @@ extern "C" void fpsan_mpfr_GSL_MIN_DBL2(temp_entry* op1Idx, double op1d,
 					unsigned int colnumber){
 
   mpfr_min(res->val, op1Idx->val, op2Idx->val, MPFR_RNDN);
-  
+  res->lineno = linenumber;
+  res->opcode = MIN;
+  res->computed = computedRes;
+
+#ifdef TRACING  
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1Idx->lock;
   res->op1_key = m_lock_key_map[op1Idx->lock];
@@ -1279,11 +1375,10 @@ extern "C" void fpsan_mpfr_GSL_MIN_DBL2(temp_entry* op1Idx, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1Idx;
   res->rhs = op2Idx;
-  res->lineno = linenumber;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
-  res->opcode = MIN;
-  res->computed = computedRes;
+#endif  
+  
 }
 
 
@@ -1297,7 +1392,12 @@ extern "C" void fpsan_mpfr_GSL_MAX_DBL2(temp_entry* op1Idx, double op1d,
   
 
   mpfr_max(res->val, op1Idx->val, op2Idx->val, MPFR_RNDN);
+  res->opcode = MAX;
+  res->computed = computedRes;
+  res->lineno = linenumber;
 
+#ifdef TRACING
+  
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1Idx->lock;
   res->op1_key = m_lock_key_map[op1Idx->lock];
@@ -1307,11 +1407,10 @@ extern "C" void fpsan_mpfr_GSL_MAX_DBL2(temp_entry* op1Idx, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1Idx;
   res->rhs = op2Idx;
-  res->lineno = linenumber;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
-  res->opcode = MAX;
-  res->computed = computedRes;
+#endif
+  
 }
 
 extern "C" void fpsan_mpfr_ldexp2(temp_entry* op1Idx, double op1d, 
@@ -1330,6 +1429,13 @@ extern "C" void fpsan_mpfr_ldexp2(temp_entry* op1Idx, double op1d,
   mpfr_mul(res->val, op1Idx->val, res->val,  MPFR_RNDN);
   
   mpfr_clear(exp);
+
+  res->lineno = linenumber;
+  res->opcode = LDEXP;
+  res->computed = computedRes;
+
+
+#ifdef TRACING  
   
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1Idx->lock;
@@ -1340,11 +1446,10 @@ extern "C" void fpsan_mpfr_ldexp2(temp_entry* op1Idx, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1Idx;
   res->rhs = NULL;
-  res->lineno = linenumber;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
-  res->opcode = LDEXP;
-  res->computed = computedRes;
+#endif
+  
 }
 
 extern "C" void fpsan_mpfr_fmod2(temp_entry* op1Idx, double op1d, 
@@ -1356,7 +1461,11 @@ extern "C" void fpsan_mpfr_fmod2(temp_entry* op1Idx, double op1d,
 				 unsigned int colnumber){
   
   mpfr_fmod(res->val, op1Idx->val, op2Idx->val, MPFR_RNDN);
-  
+  res->opcode = FMOD;
+  res->computed = computedRes;
+  res->lineno = linenumber;  
+
+#ifdef TRACING  
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1Idx->lock;
   res->op1_key = m_lock_key_map[op1Idx->lock];
@@ -1366,11 +1475,10 @@ extern "C" void fpsan_mpfr_fmod2(temp_entry* op1Idx, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1Idx;
   res->rhs = op2Idx;
-  res->lineno = linenumber;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
-  res->opcode = FMOD;
-  res->computed = computedRes;
+#endif
+  
 }
 
 extern "C" void fpsan_mpfr_atan22(temp_entry* op1, double op1d, 
@@ -1383,6 +1491,11 @@ extern "C" void fpsan_mpfr_atan22(temp_entry* op1, double op1d,
   
   
   mpfr_atan2(res->val, op1->val, op2->val, MPFR_RNDN);
+  res->opcode = ATAN2;
+  res->computed = computedRes;
+  res->lineno = linenumber;
+
+#ifdef TRACING
   
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1->lock;
@@ -1393,12 +1506,10 @@ extern "C" void fpsan_mpfr_atan22(temp_entry* op1, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1;
   res->rhs = op2;
-  res->lineno = linenumber;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
-  res->opcode = ATAN2;
-  res->computed = computedRes;
-
+  
+#endif
 }
 
 extern "C" void fpsan_mpfr_hypot2(temp_entry* op1, double op1d, 
@@ -1410,6 +1521,11 @@ extern "C" void fpsan_mpfr_hypot2(temp_entry* op1, double op1d,
 				  unsigned int colnumber){
   
   mpfr_hypot(res->val, op1->val, op2->val, MPFR_RNDN);
+  res->opcode = HYPOT;
+  res->computed = computedRes;
+  res->lineno = linenumber;  
+
+#ifdef TRACING
   
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1->lock;
@@ -1420,11 +1536,9 @@ extern "C" void fpsan_mpfr_hypot2(temp_entry* op1, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1;
   res->rhs = op2;
-  res->lineno = linenumber;
   res->timestamp = m_timestamp++;
   res->error = bitsError;
-  res->opcode = HYPOT;
-  res->computed = computedRes;
+#endif  
 
 }
 
@@ -1437,7 +1551,11 @@ extern "C" void fpsan_mpfr_pow2(temp_entry* op1, double op1d,
 				unsigned int colnumber){
   
   mpfr_pow(res->val, op1->val, op2->val, MPFR_RNDN);
-  
+  res->opcode = POW;
+  res->computed = computedRes;
+  res->lineno = linenumber;  
+
+#ifdef TRACING  
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1->lock;
   res->op1_key = m_lock_key_map[op1->lock];
@@ -1447,11 +1565,11 @@ extern "C" void fpsan_mpfr_pow2(temp_entry* op1, double op1d,
   res->key = m_lock_key_map[m_key_stack_top];
   res->lhs = op1;
   res->rhs = op2;
-  res->lineno = linenumber;
+
   res->timestamp = m_timestamp++;
   res->error = bitsError;
-  res->opcode = POW;
-  res->computed = computedRes;
+#endif
+  
 }
 
 extern "C" void fpsan_mpfr_llvm_fabs(temp_entry* op1, 

@@ -73,6 +73,11 @@ int main(int argc, char** argv){
   char* filename = "test.txt";
   int m1, n1, m2, n2;
 
+  if(argc <2){
+    printf("insufficient arguments\n");
+    return 1;
+  }
+
   int iterations = atoi(argv[1]);
 
   FILE* fp = fopen(filename, "r");
