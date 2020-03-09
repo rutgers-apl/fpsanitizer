@@ -106,7 +106,7 @@ extern "C" void fpsan_init() {
 
     size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(smem_entry);
     m_shadow_stack =
-      (smem_entry *)mmap(0, length, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
+      (temp_entry *)mmap(0, length, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
 #ifdef TRACING
     m_lock_key_map =
       (size_t *)mmap(0, length, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
@@ -950,24 +950,34 @@ extern "C" void fpsan_set_return(temp_entry* src, size_t totalArgs, double op) {
   /* Santosh: revisit this design, make 0 distance from the stack top
      as the return */
 
-  smem_entry *dest = &(m_shadow_stack[m_stack_top - totalArgs]); 
+  temp_entry *dest = &(m_shadow_stack[m_stack_top - totalArgs]); 
   if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
     dest->opcode = src->opcode;
     dest->lineno = src->lineno;
-
+    dest->is_init = true;
+    
 #ifdef TRACING    
     dest->error = src->error;
     dest->lock = m_key_stack_top;
     dest->key = m_lock_key_map[m_key_stack_top];
-    dest->tmp_ptr = src;
+
+    dest->op1_lock = src->op1_lock;
+    dest->op1_key = src->op1_key;
+    dest->lhs = src->lhs;
+    dest->op2_lock = src->op2_lock;
+    dest->op2_key = src->op2_key;
+    dest->rhs = src->rhs;
+    dest->timestamp = src->timestamp;
+     
 #endif
     
   }
   else{
     std::cout<<"__set_return copying src is null:"<<"\n";
-    m_store_shadow_dconst(dest, op, 0); //when we return tmp 
+    fpsan_store_tempmeta_dconst(dest, op, 0); 
+    //    m_store_shadow_dconst(dest, op, 0); //when we return tmp 
     //we don't need to set metadata as it is null
   }
   /*  one of set_return or func_exit is called, so cleanup the
@@ -985,7 +995,7 @@ extern "C" void fpsan_set_return(temp_entry* src, size_t totalArgs, double op) {
    stack. This happens in the caller. */
 extern "C" void fpsan_get_return(temp_entry* dest) {
 
-  smem_entry *src = &(m_shadow_stack[m_stack_top]); //save return m_stack_top - totalArgs 
+  temp_entry *src = &(m_shadow_stack[m_stack_top]); //save return m_stack_top - totalArgs 
   m_set_mpfr(&(dest->val), &(src->val));
   dest->computed = src->computed;
   dest->lineno = src->lineno;
@@ -997,24 +1007,13 @@ extern "C" void fpsan_get_return(temp_entry* dest) {
   dest->error = src->error;
   dest->timestamp = m_timestamp++;
 
+  dest->op1_lock = src->op1_lock;
+  dest->op1_key = src->op1_key;
+  dest->op2_lock = src->op2_lock;
+  dest->op2_key = src->op2_key;
+  dest->lhs = src->lhs;
+  dest->rhs = src->rhs;
 
-  if(m_lock_key_map[src->lock] == src->key){
-
-    dest->op1_lock = src->tmp_ptr->op1_lock;
-    dest->op1_key = src->tmp_ptr->op1_key;
-    dest->op2_lock = src->tmp_ptr->op2_lock;
-    dest->op2_key = src->tmp_ptr->op2_key;
-    dest->lhs = src->tmp_ptr->lhs;
-    dest->rhs = src->tmp_ptr->rhs;
-  }
-  else{
-    dest->op1_lock = 0;
-    dest->op1_key = 0;
-    dest->op2_lock = 0;
-    dest->op2_key = 0;
-    dest->lhs = 0;
-    dest->rhs = 0;
-  }
 #endif  
 
 }
@@ -1023,23 +1022,24 @@ extern "C" void fpsan_get_return(temp_entry* dest) {
 
 extern "C" temp_entry* fpsan_get_arg(size_t argIdx, double op) {
 
-  smem_entry *dst = &(m_shadow_stack[m_stack_top-argIdx]);
+  temp_entry *dst = &(m_shadow_stack[m_stack_top-argIdx]);
 
 #ifdef TRACING  
-  dst->tmp_ptr->lock = m_key_stack_top;
-  dst->tmp_ptr->key = m_lock_key_map[m_key_stack_top];
+  dst->lock = m_key_stack_top;
+  dst->key = m_lock_key_map[m_key_stack_top];
 #endif  
 
   if(!dst->is_init){ //caller maybe is not instrumented for set_arg
-    m_store_shadow_dconst(dst, op, 0);
+    fpsan_store_tempmeta_dconst(dst, op, 0);
+    //m_store_shadow_dconst(dst, op, 0);
   }
 
-  return dst->tmp_ptr;
+  return dst;
 }
 
 extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
 
-  smem_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
+  temp_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
   assert(argIdx < MAX_STACK_SIZE && "Arg index is more than MAX_STACK_SIZE");
 
   /* Santosh: Check if we will ever have src == NULL with arguments */
@@ -1053,13 +1053,21 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
     dest->lock = m_key_stack_top;
     dest->key = m_lock_key_map[m_key_stack_top];
     dest->error = src->error;
-    dest->tmp_ptr = src;
+
+    dest->op1_lock = src->op1_lock;
+    dest->op1_key = src->op1_key;
+    dest->lhs = src->lhs;
+    dest->op2_lock = src->op2_lock;
+    dest->op2_key = src->op2_key;
+    dest->rhs = src->rhs;
+    dest->timestamp = src->timestamp;
+
 #endif
     
   }
   else{
-    
-    m_store_shadow_fconst(dest, op, 0);
+    fpsan_store_tempmeta_fconst(dest, op, 0);
+    //    m_store_shadow_fconst(dest, op, 0);
     dest->is_init = true;
   }
 
@@ -1067,7 +1075,7 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
 
 extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
 
-  smem_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
+  temp_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
   assert(argIdx < MAX_STACK_SIZE && "Arg index is more than MAX_STACK_SIZE");
 
   /* Santosh: Check if we will ever have src == NULL with arguments */
@@ -1081,13 +1089,22 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
     dest->lock = m_key_stack_top;
     dest->key = m_lock_key_map[m_key_stack_top];
     dest->error = src->error;
-    dest->tmp_ptr = src;
+
+    dest->op1_lock = src->op1_lock;
+    dest->op1_key = src->op1_key;
+    dest->lhs = src->lhs;
+    dest->op2_lock = src->op2_lock;
+    dest->op2_key = src->op2_key;
+    dest->rhs = src->rhs;
+    dest->timestamp = src->timestamp;
+    
+
 #endif
     
   }
   else{
-
-    m_store_shadow_dconst(dest, op, 0);
+    fpsan_store_tempmeta_fconst(dest, op, 0);
+    //    m_store_shadow_dconst(dest, op, 0);
     dest->is_init = true;
   }
 }

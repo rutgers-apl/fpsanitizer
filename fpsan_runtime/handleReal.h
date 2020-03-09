@@ -142,7 +142,7 @@ struct temp_entry{
 size_t * m_lock_key_map;
 #endif
 
-smem_entry * m_shadow_stack;
+temp_entry * m_shadow_stack;
 smem_entry ** m_shadow_memory;
 
 size_t m_precision = PRECISION;
