@@ -67,7 +67,7 @@ otherwise, use the followng line
 
   export FPSAN_HOME=<path to the FPSan github checkout>
 
-  export LD_LIBRARY_PATH=$FPSAN_HOME/runtime/obj/
+  export LD_LIBRARY_PATH=$FPSAN_HOME/fpsan_runtime/obj/
 
 ```
 
