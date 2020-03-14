@@ -1787,26 +1787,31 @@ bool FPSanitizer::runOnModule(Module &M) {
   Real = StructType::create(M.getContext(), "struct.temp_entry");
   RealPtr = Real->getPointerTo();
   Real->setBody({MPFRTy,
-      Type::getDoubleTy(M.getContext()),
-      Type::getInt32Ty(M.getContext()),
-      Type::getInt32Ty(M.getContext()),
+	Type::getDoubleTy(M.getContext()),
+	Type::getInt32Ty(M.getContext()),
+	Type::getInt32Ty(M.getContext()),
+	Type::getInt1Ty(M.getContext()),
 
-      Type::getInt64Ty(M.getContext()),
-      Type::getInt64Ty(M.getContext()),
-      Type::getInt64Ty(M.getContext()),
-      Type::getInt64Ty(M.getContext()),
-      RealPtr,
+	// All the tracing data types start here 
+	Type::getInt32Ty(M.getContext()),
+	
+	Type::getInt64Ty(M.getContext()),
+	Type::getInt64Ty(M.getContext()),
+	
+	Type::getInt64Ty(M.getContext()),
+	Type::getInt64Ty(M.getContext()),
+	RealPtr,
+	
+	Type::getInt64Ty(M.getContext()),
+	Type::getInt64Ty(M.getContext()),
+	RealPtr,
+	
+	Type::getInt64Ty(M.getContext())
 
-      Type::getInt64Ty(M.getContext()),
-      Type::getInt64Ty(M.getContext()),
-      RealPtr,
-
-      Type::getInt32Ty(M.getContext()),
-      Type::getInt64Ty(M.getContext()),
-      Type::getInt1Ty(M.getContext())});
+	});
 
   MPtrTy = Real->getPointerTo();
-
+  
 
   //TODO::Iterate over global arrays to initialize shadow memory
   for (Module::global_iterator GVI = M.global_begin(), E = M.global_end();

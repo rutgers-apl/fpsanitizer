@@ -43,12 +43,9 @@ const size_t SECONDARY_MASK = 0xffffff;
 #define debugtrace 0
 #define debugerror 0
 
-#define ERRORTHRESHOLD 35
-#define ERRORTHRESHOLD1 35
-#define ERRORTHRESHOLD2 45
-#define ERRORTHRESHOLD3 55
-#define ERRORTHRESHOLD4 63
+#define ERRORTHRESHOLD 50
 
+#define TRACING
 
 FILE * m_errfile;
 FILE * m_brfile;
@@ -69,36 +66,43 @@ struct error_info {
 
 /* smem_entry: metadata maintained with each shadow memory location.
  * val   : mpfr value for the shadow execution
- * error : number of bits in error. Why is it here?
  * computed: double value 
  * lineno: line number in the source file
  * is_init: is the MPFR initialized
  * opcode: opcode of the operation that created the result
- * lock: CETS style metadata for validity of the temporary metadata pointer
- * key:  CETS style metadata for validity of the temporary metadata pointer
- * tmp_ptr: Pointer to the metadata of the temporary 
+
+ * error : number of bits in error. Why is it here? (TRACING)
+ * lock: CETS style metadata for validity of the temporary metadata pointer (TRACING)
+ * key:  CETS style metadata for validity of the temporary metadata pointer (TRACING)
+ * tmp_ptr: Pointer to the metadata of the temporary  (TRACING)
  */
 struct smem_entry{
 
   mpfr_t val;
-  int error;
   double computed;
   unsigned int lineno;
   enum fp_op opcode;
   bool is_init;
+
+#ifdef TRACING  
+  int error;
   unsigned int lock;
   unsigned int key;
   struct temp_entry *tmp_ptr;
-
+#endif
+  
 };
 
 struct temp_entry{
 
   mpfr_t val;
   double computed;
-  int error;
   unsigned int lineno;
+  enum fp_op opcode;
+  bool is_init;
 
+#ifdef TRACING  
+  int error;
   size_t lock;
   size_t key;
 
@@ -109,10 +113,10 @@ struct temp_entry{
   size_t op2_lock;
   size_t op2_key;
   struct temp_entry* rhs;
-
-  enum fp_op opcode;
   size_t timestamp;
-  bool is_init;
+#endif
+  
+
 };
 
 # if !defined(PREC_128) && !defined(PREC_256) && !defined(PREC_512) && !defined(PREC_1024) 
@@ -134,16 +138,23 @@ struct temp_entry{
 # endif
 #endif
 
+#ifdef TRACING
 size_t * m_lock_key_map;
-smem_entry * m_shadow_stack;
+#endif
+
+temp_entry * m_shadow_stack;
 smem_entry ** m_shadow_memory;
 
 size_t m_precision = PRECISION;
 
 size_t m_stack_top = 0;
+
+#ifdef TRACING
 size_t m_timestamp = 0;
 size_t m_key_stack_top = 0;
 size_t m_key_counter = 0;
+#endif
+
 bool m_init_flag = false;
 
 size_t infCount = 0;
@@ -152,9 +163,8 @@ size_t errorCount = 0;
 size_t flipsCount = 0;
 
 std::map<unsigned long long int, struct error_info> m_inst_error_map;
-size_t *frameCur;
-std::list <temp_entry*> m_expr;
 
+std::list <temp_entry*> m_expr;
 std::string m_get_string_opcode(size_t);
 unsigned long m_ulpd(double x, double y);
 unsigned long m_ulpf(float x, float y);
