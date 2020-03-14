@@ -1054,6 +1054,9 @@ unsigned long m_ulpd(double x, double y) {
 
 extern "C" void fpsan_finish() {
 
+  if (!m_init_flag) {
+    return;
+  }
   fprintf(m_errfile, "Error above 50 bits found %zd\n", errorCount);
   fprintf(m_errfile, "Total NaN found %zd\n", nanCount);
   fprintf(m_errfile, "Total Inf found %zd\n", infCount);
