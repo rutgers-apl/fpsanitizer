@@ -45,8 +45,6 @@ const size_t SECONDARY_MASK = 0xffffff;
 
 #define ERRORTHRESHOLD 50
 
-#define TRACING
-
 FILE * m_errfile;
 FILE * m_brfile;
 
@@ -145,6 +143,8 @@ size_t * m_lock_key_map;
 temp_entry * m_shadow_stack;
 smem_entry ** m_shadow_memory;
 
+int m_prec_bits_f = 0;
+int m_prec_bits_d = 0;
 size_t m_precision = PRECISION;
 
 size_t m_stack_top = 0;
@@ -161,6 +161,7 @@ size_t infCount = 0;
 size_t nanCount = 0;
 size_t errorCount = 0;
 size_t flipsCount = 0;
+size_t ccCount = 0;
 
 std::map<unsigned long long int, struct error_info> m_inst_error_map;
 
