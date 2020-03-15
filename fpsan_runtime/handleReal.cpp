@@ -1,5 +1,11 @@
 #include "handleReal.h"
 
+/*
+We don't want to call mpfr_init on every add or sub.That's why we keep 
+it as global variables and do init once and just update on every add or sub 
+*/
+mpfr_t op1_mpfr, op2_mpfr, res_mpfr;
+mpfr_t computed, temp_diff;
 // fpsan_trace: a function that user can set a breakpoint on to
 // generate DAGs
 #ifdef TRACING
@@ -129,7 +135,15 @@ extern "C" void fpsan_init() {
     for(int i =0; i<MAX_STACK_SIZE; i++){
       mpfr_init2(m_shadow_stack[i].val, m_precision);
     }
+
     m_stack_top = 0;
+    m_prec_bits_f = 23;
+    m_prec_bits_d = 52;
+    mpfr_init2(op1_mpfr, m_precision);
+    mpfr_init2(op2_mpfr, m_precision);
+    mpfr_init2(res_mpfr, m_precision);
+    mpfr_init2(temp_diff, m_precision);
+    mpfr_init2(computed, m_precision);
   }
 }
 
@@ -573,8 +587,6 @@ void m_compute(fp_op opCode, double op1d,
       break;
   } 
 
-  if(isinf(computedResd))
-    infCount++;
   if (computedResd != computedResd)
     nanCount++;
   if(debug){
@@ -596,11 +608,109 @@ void m_compute(fp_op opCode, double op1d,
   res->timestamp = m_timestamp++;
   res->error = bitsError;
 #endif
-  
+
   res->lineno = lineNo;
   res->opcode = opCode;
   res->computed = computedResd;
 }
+
+unsigned int m_get_exact_bits(
+    double opD, int precBits,
+    temp_entry *shadow){
+
+  mpfr_set_d(computed, opD, MPFR_RNDN);
+
+  mpfr_sub(temp_diff, shadow->val, computed, MPFR_RNDN);
+
+  mpfr_exp_t exp_real = mpfr_get_exp(shadow->val);
+  mpfr_exp_t exp_computed = mpfr_get_exp(computed);
+  mpfr_exp_t exp_diff = mpfr_get_exp(temp_diff);
+
+  if(mpfr_cmp(computed, shadow->val) == 0){
+    return precBits;
+  }
+  else if(exp_real != exp_computed){
+    return 0;
+  }
+  else{
+    if(mpfr_cmp_ui(temp_diff, 0) != 0) {
+      if(precBits < abs(exp_real -  exp_diff)){
+        return precBits;
+      }
+      else{
+        return abs(exp_real -  exp_diff);
+      }
+    }
+    else{
+      return 0;
+    }
+  }
+}
+
+mpfr_exp_t m_get_cancelled_bits(double op1, double op2, double res){
+  mpfr_set_d(op1_mpfr, op1, MPFR_RNDN);
+
+  mpfr_set_d(op2_mpfr, op2, MPFR_RNDN);
+
+  mpfr_set_d(res_mpfr, res, MPFR_RNDN);
+
+  mpfr_exp_t exp_op1 = mpfr_get_exp(op1_mpfr);
+  mpfr_exp_t exp_op2 = mpfr_get_exp(op2_mpfr);
+  mpfr_exp_t exp_res = mpfr_get_exp(res_mpfr);
+
+  mpfr_exp_t max_exp;
+  if( mpfr_regular_p(op1_mpfr) == 0 ||
+      mpfr_regular_p(op2_mpfr) == 0 ||
+      mpfr_regular_p(res_mpfr) == 0)
+    return 0;
+
+  if(exp_op1 > exp_op2)
+    max_exp = exp_op1;
+  else
+    max_exp = exp_op2;
+
+  if(max_exp > exp_res)
+    return abs(max_exp - exp_res);
+  else
+    return 0;
+}
+
+unsigned int m_get_cbad(mpfr_exp_t cbits,
+    unsigned int ebitsOp1,
+    unsigned int ebitsOp2){
+  unsigned int min_ebits;
+  if (ebitsOp1 > ebitsOp2)
+    min_ebits = ebitsOp2;
+  else
+    min_ebits = ebitsOp1;
+  int badness = 1 + cbits - min_ebits;
+  if(badness > 0)
+    return badness;
+  else
+    return 0;
+}
+
+#ifdef TRACING
+unsigned int m_check_cc(double op1, 
+                        double op2, 
+                        double res,
+                        int precBits,
+                        temp_entry *shadowOp1,
+                        temp_entry *shadowOp2,
+                        temp_entry *shadowVal){
+
+  /* If op1 or op2 is NaR, then it is not catastrophic cancellation*/
+  if (isnan(op1) || isnan(op2)) return 0;
+  /* If result is 0 and it has error, then it is catastrophic cancellation*/
+  if ((res == 0) && shadowVal->error != 0) return 1;
+
+  unsigned int ebitsOp1 = m_get_exact_bits(op1, precBits, shadowOp1);
+  unsigned int ebitsOp2 = m_get_exact_bits(op2, precBits, shadowOp2);
+  mpfr_exp_t cbits = m_get_cancelled_bits(op1, op2, res);
+  unsigned int cbad = m_get_cbad(cbits, ebitsOp1, ebitsOp2);
+  return cbad;
+}
+#endif
 
 extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
 				   temp_entry* op2Idx,
@@ -614,7 +724,17 @@ extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
 				   unsigned int colnumber) {
   
   m_compute(FADD, op1d, op1Idx, op2d, op2Idx,
-	    computedResD, res, linenumber);
+      computedResD, res, linenumber);
+
+#ifdef TRACING
+  unsigned int cbad = 0;
+  if(((op1d < 0) && (op2d > 0)) ||
+      ((op1d > 0) && (op2d < 0))){
+    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_f, op1Idx, op2Idx, res);
+    if(cbad > 0)
+      ccCount++;
+  }
+#endif
 }
 
 extern "C" void fpsan_mpfr_fsub_f( temp_entry* op1Idx,
@@ -630,6 +750,16 @@ extern "C" void fpsan_mpfr_fsub_f( temp_entry* op1Idx,
   
   m_compute(FSUB, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
+
+#ifdef TRACING
+  unsigned int cbad = 0;
+  if(((op1d < 0) && (op2d < 0)) ||
+      ((op1d > 0) && (op2d > 0))){
+    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_f, op1Idx, op2Idx, res);
+    if(cbad > 0)
+      ccCount++;
+  }
+#endif
 }
 
 extern "C" void fpsan_mpfr_fmul_f( temp_entry* op1Idx,
@@ -660,6 +790,8 @@ extern "C" void fpsan_mpfr_fdiv_f( temp_entry* op1Idx,
   
   m_compute(FDIV, op1d, op1Idx, op2d, op2Idx, 
 	    computedResD, res, linenumber);
+  if(isinf(computedResD))
+    infCount++;
 }
 
 extern "C" void fpsan_mpfr_fadd( temp_entry* op1Idx,
@@ -675,6 +807,16 @@ extern "C" void fpsan_mpfr_fadd( temp_entry* op1Idx,
   
   m_compute(FADD, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
+
+#ifdef TRACING
+  unsigned int cbad = 0;
+  if(((op1d < 0) && (op2d > 0)) ||
+      ((op1d > 0) && (op2d < 0))){
+    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_d, op1Idx, op2Idx, res);
+    if(cbad > 0)
+      ccCount++;
+  }
+#endif
 }
 
 extern "C" void fpsan_mpfr_fsub( temp_entry* op1Idx,
@@ -690,6 +832,16 @@ extern "C" void fpsan_mpfr_fsub( temp_entry* op1Idx,
   
   m_compute(FSUB, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
+
+#ifdef TRACING
+  unsigned int cbad = 0;
+  if(((op1d < 0) && (op2d < 0)) ||
+      ((op1d > 0) && (op2d > 0))){
+    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_d, op1Idx, op2Idx, res);
+    if(cbad > 0)
+      ccCount++;
+  }
+#endif
 }
 
 extern "C" void fpsan_mpfr_fmul( temp_entry* op1Idx,
@@ -720,6 +872,8 @@ extern "C" void fpsan_mpfr_fdiv( temp_entry* op1Idx,
   
   m_compute(FDIV, op1d, op1Idx, op2d, op2Idx, 
 	    computedResD, res, linenumber);
+  if(isinf(computedResD))
+    infCount++;
 }
 
 bool m_check_branch(mpfr_t* op1, mpfr_t* op2,
@@ -1163,10 +1317,14 @@ unsigned long m_ulpd(double x, double y) {
 
 extern "C" void fpsan_finish() {
 
+  if (!m_init_flag) {
+    return;
+  }
   fprintf(m_errfile, "Error above 50 bits found %zd\n", errorCount);
   fprintf(m_errfile, "Total NaN found %zd\n", nanCount);
   fprintf(m_errfile, "Total Inf found %zd\n", infCount);
   fprintf(m_errfile, "Total branch flips found %zd\n", flipsCount);
+  fprintf(m_errfile, "Total catastrophic cancellation found %zd\n", ccCount);
 
   fclose(m_errfile);
   fclose(m_brfile);
