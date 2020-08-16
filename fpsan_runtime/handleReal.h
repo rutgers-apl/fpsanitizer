@@ -167,6 +167,7 @@ size_t flipsCount = 0;
 size_t ccCount = 0;
 
 std::map<unsigned long long int, struct error_info> m_inst_error_map;
+std::map<temp_entry*, std::string> m_var_map;
 
 std::string varString;
 std::list <temp_entry*> m_expr;

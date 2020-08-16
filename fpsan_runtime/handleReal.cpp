@@ -9,21 +9,43 @@ mpfr_t computed, temp_diff;
 // fpsan_trace: a function that user can set a breakpoint on to
 // generate DAGs
 
+#ifdef TRACING
 extern "C" void fpsan_fpcore(temp_entry *cur){
   if(cur){
     if(m_lock_key_map[cur->op1_lock] != cur->op1_key ){
-      varCount++;
-      varString += "( x_"+ std::to_string(varCount) + ")";
+      if(m_var_map.count(cur) > 0){
+        varString += "( x_"+ m_var_map.at(cur) + ")";
+      }
+      else{
+        varCount++;
+        auto var = std::to_string(varCount);
+        varString += "( x_"+ var + ")";
+        m_var_map.insert( std::pair<temp_entry*, std::string>(cur, var) );
+      }
       return;
     }
     if(m_lock_key_map[cur->op2_lock] != cur->op2_key){
-      varCount++;
-      varString += "( x_"+ std::to_string(varCount) + ")";
+      if(m_var_map.count(cur) > 0){
+        varString += "( x_"+ m_var_map.at(cur) + ")";
+      }
+      else{
+        varCount++;
+        auto var = std::to_string(varCount);
+        varString += "( x_"+ var + ")";
+        m_var_map.insert( std::pair<temp_entry*, std::string>(cur, var) );
+      }
       return;
     }
     if(cur->opcode == CONSTANT){
-      varCount++;
-      varString += "( x_"+ std::to_string(varCount);
+      if(m_var_map.count(cur) > 0){
+        varString += "( x_"+ m_var_map.at(cur);
+      }
+      else{
+        varCount++;
+        auto var = std::to_string(varCount);
+        varString += "( x_"+ var ;
+        m_var_map.insert( std::pair<temp_entry*, std::string>(cur, var) );
+      }
     }
     else{
       varString += "(" + m_get_string_opcode_fpcore(cur->opcode);
@@ -59,7 +81,6 @@ extern "C" void fpsan_get_fpcore(temp_entry *cur){
   varString = "";
   varCount = 0;
 }
-#ifdef TRACING
 extern "C" void fpsan_trace(temp_entry *current){
   m_expr.push_back(current);
   int level;
@@ -128,15 +149,12 @@ extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
 
 extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRes){
 
-    fpsan_trace(realRes);
-    m_expr.clear();
-    std::cout<<"\n";
-    fpsan_get_fpcore(realRes);
 #ifdef TRACING  
   if(debugtrace){
     std::cout<<"m_expr starts\n";
     m_expr.clear();
     fpsan_trace(realRes);
+    fpsan_get_fpcore(realRes);
     std::cout<<"\nm_expr ends\n";
     std::cout<<"\n";
   }

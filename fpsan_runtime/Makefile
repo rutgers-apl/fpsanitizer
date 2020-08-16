@@ -7,7 +7,10 @@ LDFLAGS+= -shared
 OPT=-O3
 
 PREC := $(if $(PRECISION),$(PRECISION), "PREC_512")
-CXXFLAGS+=-D $(PREC) -fPIC -g -std=c++11 -rdynamic -Wall -lmpfr -pthread 
+#To enable tracing run - export SET_TRACING=TRACING
+TRACING := $(if $(SET_TRACING), $(SET_TRACING), "NO_TRACING")
+CXXFLAGS+= -D $(TRACING) -D $(PREC) -fPIC -g -std=c++11 -rdynamic -Wall -lmpfr -pthread
+
 
 INCPATH=-I. 
 ARFLAGS=-rcs
