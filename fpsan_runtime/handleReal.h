@@ -16,6 +16,7 @@
 #include <string.h>
 #include <fstream>
 #include <queue>
+#include <sstream>
 #include <iostream>
 #include <stdlib.h>
 #include <execinfo.h>
@@ -45,6 +46,7 @@ const size_t SECONDARY_MASK = 0xffffff;
 
 #define ERRORTHRESHOLD 50
 
+FILE * m_fpcore;
 FILE * m_errfile;
 FILE * m_brfile;
 
@@ -157,6 +159,7 @@ size_t m_key_counter = 0;
 
 bool m_init_flag = false;
 
+size_t varCount = 0;
 size_t infCount = 0;
 size_t nanCount = 0;
 size_t errorCount = 0;
@@ -164,9 +167,12 @@ size_t flipsCount = 0;
 size_t ccCount = 0;
 
 std::map<unsigned long long int, struct error_info> m_inst_error_map;
+std::map<temp_entry*, std::string> m_var_map;
 
+std::string varString;
 std::list <temp_entry*> m_expr;
 std::string m_get_string_opcode(size_t);
+std::string m_get_string_opcode_fpcore(size_t);
 unsigned long m_ulpd(double x, double y);
 unsigned long m_ulpf(float x, float y);
 int m_update_error(temp_entry *mpfr_val, double computedVal); 

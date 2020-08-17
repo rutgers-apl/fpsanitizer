@@ -8,25 +8,97 @@ mpfr_t op1_mpfr, op2_mpfr, res_mpfr;
 mpfr_t computed, temp_diff;
 // fpsan_trace: a function that user can set a breakpoint on to
 // generate DAGs
+
 #ifdef TRACING
+extern "C" void fpsan_fpcore(temp_entry *cur){
+  if(cur){
+    if(m_lock_key_map[cur->op1_lock] != cur->op1_key ){
+      if(m_var_map.count(cur) > 0){
+        varString += "( x_"+ m_var_map.at(cur) + ")";
+      }
+      else{
+        varCount++;
+        auto var = std::to_string(varCount);
+        varString += "( x_"+ var + ")";
+        m_var_map.insert( std::pair<temp_entry*, std::string>(cur, var) );
+      }
+      return;
+    }
+    if(m_lock_key_map[cur->op2_lock] != cur->op2_key){
+      if(m_var_map.count(cur) > 0){
+        varString += "( x_"+ m_var_map.at(cur) + ")";
+      }
+      else{
+        varCount++;
+        auto var = std::to_string(varCount);
+        varString += "( x_"+ var + ")";
+        m_var_map.insert( std::pair<temp_entry*, std::string>(cur, var) );
+      }
+      return;
+    }
+    if(cur->opcode == CONSTANT){
+      if(m_var_map.count(cur) > 0){
+        varString += "( x_"+ m_var_map.at(cur);
+      }
+      else{
+        varCount++;
+        auto var = std::to_string(varCount);
+        varString += "( x_"+ var ;
+        m_var_map.insert( std::pair<temp_entry*, std::string>(cur, var) );
+      }
+    }
+    else{
+      varString += "(" + m_get_string_opcode_fpcore(cur->opcode);
+    }
+    if(cur->lhs != NULL){
+      if(cur->lhs->timestamp < cur->timestamp){
+        fpsan_fpcore(cur->lhs);
+      }
+    }
+    if(cur->rhs != NULL){
+      if(cur->rhs->timestamp < cur->timestamp){
+        fpsan_fpcore(cur->rhs);
+      }
+    }
+    varString += ")";
+  }
+}
+
+extern "C" void fpsan_get_fpcore(temp_entry *cur){
+  fflush(stdout);
+  fpsan_fpcore(cur);
+  std::string out_fpcore;
+  out_fpcore = "(FPCore ( ";
+
+  while(varCount > 0){
+    out_fpcore += "x_"+std::to_string(varCount) + " ";
+    varCount--;
+  }
+  out_fpcore += ")\n";
+  out_fpcore += varString; 
+  out_fpcore += ")\n";
+  fprintf(m_fpcore, "%s",out_fpcore.c_str());
+  varString = "";
+  varCount = 0;
+}
 extern "C" void fpsan_trace(temp_entry *current){
   m_expr.push_back(current);
   int level;
   while(!m_expr.empty()){
     level = m_expr.size();
     temp_entry *cur = m_expr.front();
-    std::cout<<"\n";
     if(cur == NULL){
       return;
     }
-    std::cout<<" "<<cur->lineno<<" "<<m_get_string_opcode(cur->opcode)<<" ";
-    fflush(stdout);
     if(m_lock_key_map[cur->op1_lock] != cur->op1_key ){
       return;
     }
     if(m_lock_key_map[cur->op2_lock] != cur->op2_key){
       return;
     }
+    std::cout<<"\n";
+    std::cout<<" "<<cur->lineno<<" "<<m_get_string_opcode(cur->opcode)<<" ";
+    fflush(stdout);
     if(cur->lhs != NULL){
       std::cout<<" "<<cur->lhs->lineno<<" ";
       if(cur->lhs->timestamp < cur->timestamp){
@@ -82,6 +154,7 @@ extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRe
     std::cout<<"m_expr starts\n";
     m_expr.clear();
     fpsan_trace(realRes);
+    fpsan_get_fpcore(realRes);
     std::cout<<"\nm_expr ends\n";
     std::cout<<"\n";
   }
@@ -103,6 +176,7 @@ extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRe
 extern "C" void fpsan_init() {
   if (!m_init_flag) {
     
+    m_fpcore = fopen ("fpsan.fpcore","w");
     m_errfile = fopen ("error.log","w");
     m_brfile = fopen ("branch.log","w");
     
@@ -326,6 +400,24 @@ extern "C" void fpsan_copy_phi(temp_entry* src, temp_entry* dst){
 
   if(src != NULL){
     m_set_mpfr(&(dst->val), &(src->val));
+    dst->computed = src->computed;
+    dst->opcode = src->opcode;
+    dst->lineno = src->lineno;
+    dst->is_init = true;
+
+#ifdef TRACING    
+    dst->lock = m_key_stack_top;
+    dst->key = m_lock_key_map[m_key_stack_top];
+    dst->error = src->error;
+
+    dst->op1_lock = src->op1_lock;
+    dst->op1_key = src->op1_key;
+    dst->lhs = src->lhs;
+    dst->op2_lock = src->op2_lock;
+    dst->op2_key = src->op2_key;
+    dst->rhs = src->rhs;
+    dst->timestamp = src->timestamp;
+#endif
   }
 }
 
@@ -993,6 +1085,44 @@ extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
 }
 
 
+std::string m_get_string_opcode_fpcore(size_t opcode){
+  switch(opcode){
+    case FADD:
+      return "+";
+    case FMUL:
+      return "*";
+    case FSUB:
+      return "-";
+    case FDIV:
+      return "/";
+    case CONSTANT:
+      return "CONSTANT";
+    case SQRT:  
+      return "sqrt";
+    case FLOOR:  
+      return "floor";
+    case TAN:  
+      return "tan";
+    case SIN:  
+      return "sin";
+    case COS:  
+      return "cos";
+    case ATAN:  
+      return "atan";
+    case ABS:  
+      return "abs";
+    case LOG:  
+      return "log";
+    case ASIN:  
+      return "asin";
+    case EXP:  
+      return "exp";
+    case POW:
+      return "pow";
+    default:
+      return "Unknown";
+  }
+}
 std::string m_get_string_opcode(size_t opcode){
   switch(opcode){
     case FADD:
@@ -1200,6 +1330,7 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
   if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
+    dest->opcode = src->opcode;
     dest->lineno = src->lineno;
     dest->is_init = true;
 
@@ -1237,6 +1368,7 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
     dest->lineno = src->lineno;
+    dest->opcode = src->opcode;
     dest->is_init = true;
 
 #ifdef TRACING    
