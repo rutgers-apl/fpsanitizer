@@ -17,7 +17,7 @@
       tar -xvf llvm-9.0.0.src.tar.xz
       mv llvm-9.0.0.src/ llvm
       tar -xvf cfe-9.0.0.src.tar.xz
-      mv cfe-9.0.0.src/* clang
+      mv cfe-9.0.0.src clang
       mkdir build
       cd build
       cmake -DLLVM_ENABLE_PROJECTS=clang -G "Unix Makefiles" ../llvm
