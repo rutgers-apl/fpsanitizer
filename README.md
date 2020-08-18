@@ -1,7 +1,8 @@
-# fpsanitizer - A debugger to detect and diagnose numerical errors in floating point programs
+FPSanitizer - A debugger to detect and diagnose numerical errors in floating point programs
+======
 
-
-## How to build
+Building LLVM
+------
 
 1. Get llvm and clang version 9
 ```
@@ -30,13 +31,24 @@
   export LLVM_HOME=<path to LLVM build>
 ```
 
-4. Clone fpsan git repo.
+Building FPSanitizer
+------
+
+1. Clone fpsan git repo.
 ```
   git clone https://github.com/rutgers-apl/fpsanitizer.git
 
 ```
 
-5. If your compiler does not support C++11 by default, add the following line to fpsan-pass/FPSan/CMakefile
+2. Set the environment variable FPSAN_HOME
+
+```
+  export FPSAN_HOME=<path to the FPSan github checkout>
+
+```
+
+
+3. If your compiler does not support C++11 by default, add the following line to $FPSAN_HOME/fpsan-pass/FPSan/CMakefile
 
 ```
   target_compile_feature(FPSanitizer PRIVATE cxx_range_for cxx_auto_type)
@@ -50,10 +62,10 @@ otherwise, use the followng line
 
 ```
 
-6. Build the FPSan pass
+3. Build the FPSan pass
 
 ```
-  cd fpsanitizer/fpsan_pass
+  cd $FPSAN_HOME/fpsan_pass
   mkdir build
   cd build
   cmake -DCMAKE_BUILD_TYPE="Debug" ../
@@ -61,7 +73,21 @@ otherwise, use the followng line
 
 ```
 
-7. Try out the tests in regression_tests directory. Set the following environment variables
+
+4. Build the FPSan runtime
+
+```
+  cd $FPSAN_HOME/fpsan_runtime
+  make
+
+```
+
+
+
+Testing the FPSanitizer with applications
+------
+
+1. Try out the tests in regression_tests directory. Set the following environment variables
 
 ```
   export LLVM_HOME=<LLVM build directory>
@@ -74,6 +100,8 @@ otherwise, use the followng line
 
 and then,
 ```
+  cd $FPSAN_HOME/regression_tests
+  
   make
 
   ./diff-root-simple.o
@@ -81,4 +109,7 @@ and then,
 ```
 
 It should report the number of branch flips and number of instances with more than 50 ulp errors in error.log
-      
+
+
+2. Try out the various modes: tracing that prints out DAGs, generating
+DAGs in FPCore format, and different precisions for the metadata.
