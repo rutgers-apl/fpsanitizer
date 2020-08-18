@@ -53,6 +53,7 @@ otherwise, use the followng line
 6. Build the FPSan pass
 
 ```
+  cd fpsanitizer/fpsan_pass
   mkdir build
   cd build
   cmake -DCMAKE_BUILD_TYPE="Debug" ../
