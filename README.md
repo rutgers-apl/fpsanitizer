@@ -5,24 +5,23 @@ Building LLVM
 ------
 
 1. Get llvm and clang version 9
+
 ```
-
   wget http://releases.llvm.org/9.0.0/llvm-9.0.0.src.tar.xz
-
   wget http://releases.llvm.org/9.0.0/cfe-9.0.0.src.tar.xz
 ```
 
 2. Build llvm and clang
 
 ```
-      tar -xvf llvm-9.0.0.src.tar.xz
-      mv llvm-9.0.0.src/ llvm
-      tar -xvf cfe-9.0.0.src.tar.xz
-      mv cfe-9.0.0.src clang
-      mkdir build
-      cd build
-      cmake -DLLVM_ENABLE_PROJECTS=clang -G "Unix Makefiles" ../llvm
-      make -j8
+  tar -xvf llvm-9.0.0.src.tar.xz
+  mv llvm-9.0.0.src/ llvm
+  tar -xvf cfe-9.0.0.src.tar.xz
+  mv cfe-9.0.0.src clang
+  mkdir build
+  cd build
+  cmake -DLLVM_ENABLE_PROJECTS=clang -G "Unix Makefiles" ../llvm
+  make -j8
 
 ```
 
@@ -58,7 +57,7 @@ Building FPSanitizer
 otherwise, use the followng line
 
 ```
-        target_compile_features(FPSanitizer PRIVATE )
+  target_compile_features(FPSanitizer PRIVATE )
 
 ```
 
@@ -78,6 +77,7 @@ otherwise, use the followng line
 
 ```
   cd $FPSAN_HOME/fpsan_runtime
+  export SET_TRACING=TRACING
   make
 
 ```
@@ -86,12 +86,13 @@ otherwise, use the followng line
 Testing microbenchmarks using fpsanitizer:
 ------
 
-In the directory containing, one can test the microbenchmarks using
+One can test the microbenchmarks using
 fpsanitizer with the following commands: 
 
 ```
-	  $ cd fpsanitizer/fpsanitizer_test/
-	  $ python3 correctness_test.py
+  cd fpsanitizer_test/
+  python3 correctness_test.py
+
 ```	  
 
 This process should take less than 4 minutes. During the execution,
