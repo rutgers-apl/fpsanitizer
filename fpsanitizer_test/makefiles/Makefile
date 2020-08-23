@@ -1,14 +1,10 @@
 #CFLAGS=-O1 -fno-slp-vectorize -std=c11  -L$(FPROOT)/obj -lfpsanitizer -lmpfr -lm -pthread -ltbb -lstdc++
-CFLAGS=-O1 -fno-slp-vectorize -g -std=c11 -L$(FPSAN_HOME)/fpsan_runtime/obj -lfpsanitizer -lmpfr -lm  -lstdc++ 
+CFLAGS=-O0 -fno-slp-vectorize -g -std=c11 -L$(FPSAN_HOME)/fpsan_runtime/obj -lfpsanitizer -lmpfr -lm  -lstdc++ 
 CAMLFLAGs=
 CSRC = $(wildcard *.c)
 COUT = $(patsubst %.c,%.o,$(CSRC))
 
-#DEBUGTRACEFLAG = -D debugtrace
-DEBUGTRACEFLAG = 
-
-
-CC = clang $(DEBUGTRACEFLAG) -pg -Xclang -load -Xclang $(FPSAN_HOME)/fpsan_pass/build/FPSan/libFPSanitizer.so
+CC = clang -pg -Xclang -load -Xclang $(FPSAN_HOME)/fpsan_pass/build/FPSan/libFPSanitizer.so
 
 all: $(COUT) $(CAMLOUT)
 
@@ -25,4 +21,4 @@ all: $(COUT) $(CAMLOUT)
 
 
 clean:
-	rm -rf *.o *.sout *.dSYM *~ *.log functions.txt  *.out *.ll *.bc
+	rm -rf *.o *.sout *.dSYM *~ *.log functions.txt  *.out

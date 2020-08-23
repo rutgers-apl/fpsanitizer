@@ -83,33 +83,26 @@ otherwise, use the followng line
 ```
 
 
-
-Testing the FPSanitizer with applications
+Testing microbenchmarks using fpsanitizer:
 ------
 
-1. Try out the tests in regression_tests directory. Set the following environment variables
+In the directory containing, one can test the microbenchmarks using
+fpsanitizer with the following commands: 
 
 ```
-  export LLVM_HOME=<LLVM build directory>
+	  $ cd fpsanitizer/fpsanitizer_test/
+	  $ python3 correctness_test.py
+```	  
 
-  export FPSAN_HOME=<path to the FPSan github checkout>
+This process should take less than 4 minutes. During the execution,
+the script runs each microbenchmark and reports whether the
+microbenchmark has (a) NaN computation, (b)catastrophic cancellation,
+(c) infinity computation, or (d) branch flip. The script also outputs
+whether this error is correctly found (expected with green letters) or
+incorrectly found (unexpected with red letters). The script should
+only report "expected" and not "unexpected."
 
-  export LD_LIBRARY_PATH=$FPSAN_HOME/fpsan_runtime/obj/
+Finally, when the script terminates, it reports the total number of
+microbenchmarks, the total number of microbenchmarks that reports each
+type of error, and whether the numbers are correct or not.
 
-```
-
-and then,
-```
-  cd $FPSAN_HOME/regression_tests
-  
-  make
-
-  ./diff-root-simple.o
-
-```
-
-It should report the number of branch flips and number of instances with more than 50 ulp errors in error.log
-
-
-2. Try out the various modes: tracing that prints out DAGs, generating
-DAGs in FPCore format, and different precisions for the metadata.

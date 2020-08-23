@@ -1,5 +1,4 @@
 sqrt
-exp
 sqrtf
 cos
 sin
