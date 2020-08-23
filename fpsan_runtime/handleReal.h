@@ -44,7 +44,7 @@ const size_t SECONDARY_MASK = 0xffffff;
 #define debugtrace 0
 #define debugerror 0
 
-#define ERRORTHRESHOLD 50
+#define ERRORTHRESHOLD 64
 
 FILE * m_fpcore;
 FILE * m_errfile;

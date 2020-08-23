@@ -184,7 +184,7 @@ extern "C" void fpsan_init() {
     m_init_flag = true;
     size_t length = MAX_STACK_SIZE * sizeof(temp_entry);
 
-    size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(smem_entry);
+    size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(smem_entry *);
     m_shadow_stack =
       (temp_entry *)mmap(0, length, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
 #ifdef TRACING
@@ -1452,7 +1452,7 @@ extern "C" void fpsan_finish() {
   if (!m_init_flag) {
     return;
   }
-  fprintf(m_errfile, "Error above 50 bits found %zd\n", errorCount);
+  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD, errorCount);
   fprintf(m_errfile, "Total NaN found %zd\n", nanCount);
   fprintf(m_errfile, "Total Inf found %zd\n", infCount);
   fprintf(m_errfile, "Total branch flips found %zd\n", flipsCount);
