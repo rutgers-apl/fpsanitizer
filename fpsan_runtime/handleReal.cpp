@@ -4,6 +4,10 @@
 We don't want to call mpfr_init on every add or sub.That's why we keep 
 it as global variables and do init once and just update on every add or sub 
 */
+#define ERRORTHRESHOLD1 35
+#define ERRORTHRESHOLD2 45
+#define ERRORTHRESHOLD3 55
+#define ERRORTHRESHOLD4 63
 mpfr_t op1_mpfr, op2_mpfr, res_mpfr;
 mpfr_t computed, temp_diff;
 // fpsan_trace: a function that user can set a breakpoint on to
@@ -130,15 +134,29 @@ extern "C" void fpsan_trace(temp_entry *current){
 // fpsan_check_branch, fpsan_check_conversion, fpsan_check_error are
 // functions that user can set breakpoint on
 
-extern "C" unsigned int  fpsan_check_branch(bool realBr, bool computedBr,
-					    temp_entry *realRes1,
-					    temp_entry *realRes2){
-  if(realBr != computedBr) {
-    return 1;
+extern "C" bool fpsan_check_branch_f(float op1d, temp_entry* op1,
+				     float op2d, temp_entry* op2,
+				     size_t fcmpFlag, bool computedRes,
+				     size_t lineNo){
+
+  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
+  if(realRes != computedRes){
+    flipsCount++;
   }
-  return 0;
+  return realRes;
 }
 
+extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
+				 double op2d, temp_entry* op2,
+				 size_t fcmpFlag, bool computedRes,
+				 size_t lineNo){
+
+  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
+  if(realRes != computedRes){
+    flipsCount++;
+  }
+  return realRes;
+}
 extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
 						temp_entry *realRes){
   if(real != computed){
@@ -147,31 +165,54 @@ extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
   return 0;
 }
 
-extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRes){
-
-#ifdef TRACING  
-  if(debugtrace){
-    std::cout<<"m_expr starts\n";
-    m_expr.clear();
-    fpsan_trace(realRes);
-    fpsan_get_fpcore(realRes);
-    std::cout<<"\nm_expr ends\n";
-    std::cout<<"\n";
+unsigned int check_error(temp_entry *realRes, double computedRes){
+#ifdef TRACING
+  if(realRes->error >= ERRORTHRESHOLD4){
+    errorCount63++;
+    return 1;
+  }
+  else if(realRes->error >= ERRORTHRESHOLD3){
+    errorCount55++;
+    return 2;
+  }
+  else if(realRes->error >= ERRORTHRESHOLD2){
+    errorCount45++;
+    return 3;
+  }
+  else if(realRes->error >= ERRORTHRESHOLD1){
+    errorCount35++;
+    return 4;
+  }
+#else
+  int bits_error = m_update_error(realRes, computedRes, 0);
+  if(bits_error > ERRORTHRESHOLD4){
+    errorCount63++;
+    return 1;
+  }
+  else if(bits_error > ERRORTHRESHOLD3){
+    errorCount55++;
+    return 2;
+  }
+  else if(bits_error > ERRORTHRESHOLD2){
+    errorCount45++;
+    return 3;
+  }
+  else if(bits_error > ERRORTHRESHOLD1){
+    errorCount35++;
+    return 4;
   }
 
-  
-  if(realRes->error > ERRORTHRESHOLD)
-    return 4; 
+#endif
   return 0;
-#else
-  int bits_error = m_update_error(realRes, computedRes);
-  if(bits_error > ERRORTHRESHOLD)
-    return 4;
-
-  return 0;
-#endif   
 }
 
+extern "C" unsigned int fpsan_check_error_f(temp_entry *realRes, float computedRes){
+  return check_error(realRes, computedRes);
+}
+
+extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRes){
+  return check_error(realRes, computedRes);
+}
 
 extern "C" void fpsan_init() {
   if (!m_init_flag) {
@@ -1060,29 +1101,6 @@ bool m_check_branch(mpfr_t* op1, mpfr_t* op2,
   return realRes;
 }
 
-extern "C" bool fpsan_check_branch_f(float op1d, temp_entry* op1,
-				     float op2d, temp_entry* op2,
-				     size_t fcmpFlag, bool computedRes,
-				     size_t lineNo){
-
-  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
-  if(realRes != computedRes){
-    flipsCount++;
-  }
-  return realRes;
-}
-
-extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
-				 double op2d, temp_entry* op2,
-				 size_t fcmpFlag, bool computedRes,
-				 size_t lineNo){
-
-  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
-  if(realRes != computedRes){
-    flipsCount++;
-  }
-  return realRes;
-}
 
 
 std::string m_get_string_opcode_fpcore(size_t opcode){
@@ -1395,37 +1413,6 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
   }
 }
 
-#ifdef TRACING
-
-void m_print_error(size_t opcode, temp_entry * real,
-		 double d_value, unsigned int cbad,
-		 unsigned long long int instId,
-		 bool debugInfoAvail, unsigned int linenumber,
-		 unsigned int colnumber){
-  
-  double shadow_rounded = m_get_double(real->val);
-
-  unsigned long ulp_error = m_ulpd(shadow_rounded, d_value);
-  double bits_error = log2(ulp_error + 1);
-
-
-  if(bits_error > ERRORTHRESHOLD){
-    if(m_inst_error_map.count(instId) == 0){
-      m_inst_error_map[instId] = {bits_error, cbad, linenumber, colnumber, debugInfoAvail};
-    }
-    else{
-      double old_error = m_inst_error_map[instId].error;
-      if(old_error < bits_error){
-        m_inst_error_map[instId].error =  bits_error;
-      }
-      m_inst_error_map[instId].cbad = cbad;
-    }
-  } 
-}
-
-#endif
-
-
 unsigned long m_ulpd(double x, double y) {
   if (x == 0)
     x = 0; // -0 == 0
@@ -1452,7 +1439,10 @@ extern "C" void fpsan_finish() {
   if (!m_init_flag) {
     return;
   }
-  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD, errorCount);
+  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD4, errorCount63);
+  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD3, errorCount55);
+  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD2, errorCount45);
+  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD1, errorCount35);
   fprintf(m_errfile, "Total NaN found %zd\n", nanCount);
   fprintf(m_errfile, "Total Inf found %zd\n", infCount);
   fprintf(m_errfile, "Total branch flips found %zd\n", flipsCount);
@@ -1468,8 +1458,6 @@ int m_update_error(temp_entry *real, double computedVal){
 
   double bitsError = log2(ulpsError + 1);
 
-  if(bitsError >  ERRORTHRESHOLD)
-    errorCount++;
   if (debugerror){
     std::cout<<"\nThe shadow value is ";
     m_print_real(real->val);

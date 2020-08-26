@@ -1277,7 +1277,12 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
   HandleFunc = M->getOrInsertFunction(funcName, FunctionType::get(IRB.getVoidTy(), ArgsTy, false));
   IRB.CreateCall(HandleFunc, ArgsVal);
   MInsMap.insert(std::pair<Instruction*, Instruction*>(I, dyn_cast<Instruction>(BOGEP)));
-  FuncInit = M->getOrInsertFunction("fpsan_check_error", VoidTy, MPtrTy, CI->getType());
+  if(isFloat(CI->getType())){
+    FuncInit = M->getOrInsertFunction("fpsan_check_error_f", VoidTy, MPtrTy, CI->getType());
+  }
+  else{
+    FuncInit = M->getOrInsertFunction("fpsan_check_error", VoidTy, MPtrTy, CI->getType());
+  }
   IRB.CreateCall(FuncInit, {BOGEP, CI});
 }
 
@@ -1597,16 +1602,17 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   if(isFloat(BO->getType())){
     ComputeReal = M->getOrInsertFunction("fpsan_mpfr_"+opName+"_f", VoidTy, MPtrTy, MPtrTy, MPtrTy, BOType, BOType,
         BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
+    FuncInit = M->getOrInsertFunction("fpsan_check_error_f", VoidTy, MPtrTy, BOType);
   }
   else if(isDouble(BO->getType())){
     ComputeReal = M->getOrInsertFunction("fpsan_mpfr_"+opName, VoidTy, MPtrTy, MPtrTy, MPtrTy, BOType, BOType,
         BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
+    FuncInit = M->getOrInsertFunction("fpsan_check_error", VoidTy, MPtrTy, BOType);
   }
 
   IRB.CreateCall(ComputeReal, {InsIndex1, InsIndex2, BOGEP, BO->getOperand(0), BO->getOperand(1), BO, 
       instId, debugInfoAvailable, lineNumber, colNumber});
   MInsMap.insert(std::pair<Instruction*, Instruction*>(I, dyn_cast<Instruction>(BOGEP)));
-  FuncInit = M->getOrInsertFunction("fpsan_check_error", VoidTy, MPtrTy, BOType);
   IRB.CreateCall(FuncInit, {BOGEP, BO});
 }
 

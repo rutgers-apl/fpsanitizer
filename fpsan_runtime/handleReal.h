@@ -44,8 +44,6 @@ const size_t SECONDARY_MASK = 0xffffff;
 #define debugtrace 0
 #define debugerror 0
 
-#define ERRORTHRESHOLD 64
-
 FILE * m_fpcore;
 FILE * m_errfile;
 FILE * m_brfile;
@@ -165,6 +163,10 @@ size_t nanCount = 0;
 size_t errorCount = 0;
 size_t flipsCount = 0;
 size_t ccCount = 0;
+size_t errorCount63 = 0;
+size_t errorCount55 = 0;
+size_t errorCount45 = 0;
+size_t errorCount35 = 0;
 
 std::map<unsigned long long int, struct error_info> m_inst_error_map;
 std::map<temp_entry*, std::string> m_var_map;
@@ -193,5 +195,5 @@ void m_compute(fp_op , double, temp_entry *, double,
 
 void m_store_shadow_dconst(smem_entry *, double , unsigned int);
 void m_store_shadow_fconst(smem_entry *, float , unsigned int);
-
+bool m_check_branch(mpfr_t*, mpfr_t*, size_t);
 #endif
