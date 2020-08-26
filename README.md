@@ -110,31 +110,31 @@ type of error, and whether the numbers are correct or not.
 ------
 Running case studies using fpsanitizer:
 ------
-
+```
  $ cd case_studies/cordic/cordic_sin
  $ gdb cordic_sin.fp.o
-
+```
     Now our goal is to find a computation of the variable "y"
     which has more than or equal to 45 bits of error.  Place a
     conditional breakpoint which looks for any floating point operation
     resulting in the error of 45 bits or more. Since
     handleReal.cpp is a part of the shared library, type "y"
     when prompted, and run the program:
-
+```
     (gdb) break handleReal.cpp:179 if realRes->error >= 45
     (gdb) y
     (gdb) run
-
+```
     Skip the first seven break. This instance computes the value for
     the variable "z." 
-
+```
     (gdb) continue
-
+```
     Now, call the function "fpsan_trace" which prints the trace of
     expressions leading up to the computed value:
-
+```
     (gdb) call fpsan_trace(realRes)
-
+```
     You should be able to see a trace of 8 operations. For each
     line, the first value tells you the line number of the computation. The
     second value tells you which operations is executed, the
@@ -152,17 +152,17 @@ Running case studies using fpsanitizer:
     Now our goal is to detect the first instance of branch
     flip. First, remove the exisiting breakpoint and add a
     breakpoint that detects where branch flip occurs:
-
+```
     (gdb) clear
     (gdb) break handleReal.cpp:144
     (gdb) continue
-
+```
     At this point, the floating point result of "op1" causes a branch
     flip. You can look at the trace of "op1" by calling
     "fpsan_trace":
-
+```
     (gdb) call fpsan_trace(op1)
-
+```
     You should see a trace of 4 instructions. You will notice that
     the first line of the trace for a subtraction operation
     (FSUB) shows that fp computed a positive value whereas
@@ -175,13 +175,13 @@ Running case studies using fpsanitizer:
 
           The source code for simpson's rule can be found in the ccase
           studies directory. Form the PositDebug_Artifact director,
-
+```
     $ cd case_studies/simpson
-
+```
     Compile the program,
-
+```
     $ make
-
+```
     Run the program simpsons.fp.o. It will take roughly 1
     minute. You should observe that the output is
     1.8633..E+20. However, the correct result is 1.8840...E20. 
@@ -189,46 +189,46 @@ Running case studies using fpsanitizer:
     more than 45 bits of error.
 
     Run gdb, set break point to line 28 in SimpsonsRule.c, and start the program:
-
+```
     $ gdb simpsons.fp.o
     (gdb) break 28
     (gdb) r
     (gdb) break handleReal.cpp:179
     (gdb) y
     (gdb) c
-
+```
     handleReal.cpp:179 is a location in the runtime that
     explicitly checks whether an operation has more than or
     equal to 45 bits of error. When gdb breaks, look at the
     trace of the realRes:
-
+```
     (gdb) call fpsan_trace(realRes)
-
+```
     You will notice that at this point, the first operation
     FMUL at line 28 has 45 bits of error. It's operands at line 28 and 27 
     have error of 26 and 45 bits respectively. FADD at line 27 has two operands- 
     line 25 and 6. Line 6 is a function so we don't have a trace for computations 
     in this function. To diagnose the errors in this function we have to set a breakpoint
     in this function. 
-    
+   ``` 
     (gdb) delete
     (gdb) b SimpsonsRule.c:27
     (gdb) b f
     (gdb) b fpsan_check_error_f
     (gdb) call fpsan_trace(realRes)
-
+```
     At this point you can see that multiplication at line 6 causes 27 bits of error. 
     We can investigate how we have got 45 bits of error in FADD at line 25. 
     We want to skip few iterations of the for loop in floatSimpsonsRuleV1F1. 
     To do that follow below steps:
-
+```
     (gdb) b SimpsonsRule.c:23
     (gdb) r 
     (gdb) c 2000
     (gdb) b fpsan_check_error_f
     (gdb) c
     (gdb) call fpsan_trace(realRes)
-
+```
     This will show error trace for FMUL at line 22 with error of 26 bits.
     If you continue skipping some iterations and looking at error trace, you will notice that 
     error is being accumulated due to computations with very large values.
