@@ -43,8 +43,7 @@ const size_t SECONDARY_MASK = 0xffffff;
 #define debug 0
 #define debugtrace 0
 #define debugerror 0
-
-#define ERRORTHRESHOLD 64
+#define ERRORTHRESHOLD 45
 
 FILE * m_fpcore;
 FILE * m_errfile;
@@ -193,5 +192,5 @@ void m_compute(fp_op , double, temp_entry *, double,
 
 void m_store_shadow_dconst(smem_entry *, double , unsigned int);
 void m_store_shadow_fconst(smem_entry *, float , unsigned int);
-
+bool m_check_branch(mpfr_t*, mpfr_t*, size_t);
 #endif

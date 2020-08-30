@@ -130,15 +130,29 @@ extern "C" void fpsan_trace(temp_entry *current){
 // fpsan_check_branch, fpsan_check_conversion, fpsan_check_error are
 // functions that user can set breakpoint on
 
-extern "C" unsigned int  fpsan_check_branch(bool realBr, bool computedBr,
-					    temp_entry *realRes1,
-					    temp_entry *realRes2){
-  if(realBr != computedBr) {
-    return 1;
+extern "C" bool fpsan_check_branch_f(float op1d, temp_entry* op1,
+				     float op2d, temp_entry* op2,
+				     size_t fcmpFlag, bool computedRes,
+				     size_t lineNo){
+
+  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
+  if(realRes != computedRes){
+    flipsCount++;
   }
-  return 0;
+  return realRes;
 }
 
+extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
+				 double op2d, temp_entry* op2,
+				 size_t fcmpFlag, bool computedRes,
+				 size_t lineNo){
+
+  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
+  if(realRes != computedRes){
+    flipsCount++;
+  }
+  return realRes;
+}
 extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
 						temp_entry *realRes){
   if(real != computed){
@@ -147,8 +161,7 @@ extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
   return 0;
 }
 
-extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRes){
-
+unsigned int check_error(temp_entry *realRes, double computedRes){
 #ifdef TRACING  
   if(debugtrace){
     std::cout<<"m_expr starts\n";
@@ -159,8 +172,8 @@ extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRe
     std::cout<<"\n";
   }
 
-  
-  if(realRes->error > ERRORTHRESHOLD)
+
+  if(realRes->error >= ERRORTHRESHOLD)
     return 4; 
   return 0;
 #else
@@ -172,6 +185,13 @@ extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRe
 #endif   
 }
 
+extern "C" unsigned int fpsan_check_error_f(temp_entry *realRes, float computedRes){
+  return check_error(realRes, computedRes);
+}
+
+extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRes){
+  return check_error(realRes, computedRes);
+}
 
 extern "C" void fpsan_init() {
   if (!m_init_flag) {
@@ -367,6 +387,28 @@ smem_entry* m_get_shadowaddress(size_t address){
   return realAddr;
 }
 
+extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
+  
+  size_t toAddrInt = (size_t) (toAddr);
+  size_t fromAddrInt = (size_t) (fromAddr);
+  for(int i=0; i<size; i++){
+    smem_entry* dst = m_get_shadowaddress(toAddrInt+i);
+    smem_entry* src = m_get_shadowaddress(fromAddrInt+i);
+    m_set_mpfr(&(dst->val), &(src->val));
+
+#ifdef TRACING  
+    dst->error = src->error;
+    dst->lock = m_key_stack_top; 
+    dst->key = m_lock_key_map[m_key_stack_top]; 
+    dst->tmp_ptr = src->tmp_ptr;
+#endif  
+
+    dst->is_init = true;
+    dst->lineno = src->lineno;
+    dst->computed = src->computed;
+    dst->opcode = src->opcode;
+  }
+}
 void m_print_real(mpfr_t mpfr_val){
 
   mpfr_out_str (stdout, 10, 15, mpfr_val, MPFR_RNDN);
@@ -961,7 +1003,7 @@ extern "C" void fpsan_mpfr_fdiv( temp_entry* op1Idx,
 				 bool debugInfoAvail,
 				 unsigned int linenumber,
 				 unsigned int colnumber) {
-  
+ 
   m_compute(FDIV, op1d, op1Idx, op2d, op2Idx, 
 	    computedResD, res, linenumber);
   if(isinf(computedResD))
@@ -1060,29 +1102,6 @@ bool m_check_branch(mpfr_t* op1, mpfr_t* op2,
   return realRes;
 }
 
-extern "C" bool fpsan_check_branch_f(float op1d, temp_entry* op1,
-				     float op2d, temp_entry* op2,
-				     size_t fcmpFlag, bool computedRes,
-				     size_t lineNo){
-
-  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
-  if(realRes != computedRes){
-    flipsCount++;
-  }
-  return realRes;
-}
-
-extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
-				 double op2d, temp_entry* op2,
-				 size_t fcmpFlag, bool computedRes,
-				 size_t lineNo){
-
-  bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
-  if(realRes != computedRes){
-    flipsCount++;
-  }
-  return realRes;
-}
 
 
 std::string m_get_string_opcode_fpcore(size_t opcode){
@@ -1395,37 +1414,6 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
   }
 }
 
-#ifdef TRACING
-
-void m_print_error(size_t opcode, temp_entry * real,
-		 double d_value, unsigned int cbad,
-		 unsigned long long int instId,
-		 bool debugInfoAvail, unsigned int linenumber,
-		 unsigned int colnumber){
-  
-  double shadow_rounded = m_get_double(real->val);
-
-  unsigned long ulp_error = m_ulpd(shadow_rounded, d_value);
-  double bits_error = log2(ulp_error + 1);
-
-
-  if(bits_error > ERRORTHRESHOLD){
-    if(m_inst_error_map.count(instId) == 0){
-      m_inst_error_map[instId] = {bits_error, cbad, linenumber, colnumber, debugInfoAvail};
-    }
-    else{
-      double old_error = m_inst_error_map[instId].error;
-      if(old_error < bits_error){
-        m_inst_error_map[instId].error =  bits_error;
-      }
-      m_inst_error_map[instId].cbad = cbad;
-    }
-  } 
-}
-
-#endif
-
-
 unsigned long m_ulpd(double x, double y) {
   if (x == 0)
     x = 0; // -0 == 0
@@ -1470,6 +1458,7 @@ int m_update_error(temp_entry *real, double computedVal){
 
   if(bitsError >  ERRORTHRESHOLD)
     errorCount++;
+
   if (debugerror){
     std::cout<<"\nThe shadow value is ";
     m_print_real(real->val);
