@@ -4,10 +4,6 @@
 We don't want to call mpfr_init on every add or sub.That's why we keep 
 it as global variables and do init once and just update on every add or sub 
 */
-#define ERRORTHRESHOLD1 35
-#define ERRORTHRESHOLD2 45
-#define ERRORTHRESHOLD3 55
-#define ERRORTHRESHOLD4 63
 mpfr_t op1_mpfr, op2_mpfr, res_mpfr;
 mpfr_t computed, temp_diff;
 // fpsan_trace: a function that user can set a breakpoint on to
@@ -166,44 +162,27 @@ extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
 }
 
 unsigned int check_error(temp_entry *realRes, double computedRes){
-#ifdef TRACING
-  if(realRes->error >= ERRORTHRESHOLD4){
-    errorCount63++;
-    return 1;
-  }
-  else if(realRes->error >= ERRORTHRESHOLD3){
-    errorCount55++;
-    return 2;
-  }
-  else if(realRes->error >= ERRORTHRESHOLD2){
-    errorCount45++;
-    return 3;
-  }
-  else if(realRes->error >= ERRORTHRESHOLD1){
-    errorCount35++;
-    return 4;
-  }
-#else
-  int bits_error = m_update_error(realRes, computedRes, 0);
-  if(bits_error > ERRORTHRESHOLD4){
-    errorCount63++;
-    return 1;
-  }
-  else if(bits_error > ERRORTHRESHOLD3){
-    errorCount55++;
-    return 2;
-  }
-  else if(bits_error > ERRORTHRESHOLD2){
-    errorCount45++;
-    return 3;
-  }
-  else if(bits_error > ERRORTHRESHOLD1){
-    errorCount35++;
-    return 4;
+#ifdef TRACING  
+  if(debugtrace){
+    std::cout<<"m_expr starts\n";
+    m_expr.clear();
+    fpsan_trace(realRes);
+    fpsan_get_fpcore(realRes);
+    std::cout<<"\nm_expr ends\n";
+    std::cout<<"\n";
   }
 
-#endif
+
+  if(realRes->error >= ERRORTHRESHOLD)
+    return 4; 
   return 0;
+#else
+  int bits_error = m_update_error(realRes, computedRes);
+  if(bits_error > ERRORTHRESHOLD)
+    return 4;
+
+  return 0;
+#endif   
 }
 
 extern "C" unsigned int fpsan_check_error_f(temp_entry *realRes, float computedRes){
@@ -408,6 +387,28 @@ smem_entry* m_get_shadowaddress(size_t address){
   return realAddr;
 }
 
+extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
+  
+  size_t toAddrInt = (size_t) (toAddr);
+  size_t fromAddrInt = (size_t) (fromAddr);
+  for(int i=0; i<size; i++){
+    smem_entry* dst = m_get_shadowaddress(toAddrInt+i);
+    smem_entry* src = m_get_shadowaddress(fromAddrInt+i);
+    m_set_mpfr(&(dst->val), &(src->val));
+
+#ifdef TRACING  
+    dst->error = src->error;
+    dst->lock = m_key_stack_top; 
+    dst->key = m_lock_key_map[m_key_stack_top]; 
+    dst->tmp_ptr = src->tmp_ptr;
+#endif  
+
+    dst->is_init = true;
+    dst->lineno = src->lineno;
+    dst->computed = src->computed;
+    dst->opcode = src->opcode;
+  }
+}
 void m_print_real(mpfr_t mpfr_val){
 
   mpfr_out_str (stdout, 10, 15, mpfr_val, MPFR_RNDN);
@@ -1002,7 +1003,7 @@ extern "C" void fpsan_mpfr_fdiv( temp_entry* op1Idx,
 				 bool debugInfoAvail,
 				 unsigned int linenumber,
 				 unsigned int colnumber) {
-  
+ 
   m_compute(FDIV, op1d, op1Idx, op2d, op2Idx, 
 	    computedResD, res, linenumber);
   if(isinf(computedResD))
@@ -1439,10 +1440,7 @@ extern "C" void fpsan_finish() {
   if (!m_init_flag) {
     return;
   }
-  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD4, errorCount63);
-  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD3, errorCount55);
-  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD2, errorCount45);
-  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD1, errorCount35);
+  fprintf(m_errfile, "Error above %d bits found %zd\n", ERRORTHRESHOLD, errorCount);
   fprintf(m_errfile, "Total NaN found %zd\n", nanCount);
   fprintf(m_errfile, "Total Inf found %zd\n", infCount);
   fprintf(m_errfile, "Total branch flips found %zd\n", flipsCount);
@@ -1457,6 +1455,9 @@ int m_update_error(temp_entry *real, double computedVal){
   unsigned long ulpsError = m_ulpd(shadowRounded, computedVal);
 
   double bitsError = log2(ulpsError + 1);
+
+  if(bitsError >  ERRORTHRESHOLD)
+    errorCount++;
 
   if (debugerror){
     std::cout<<"\nThe shadow value is ";

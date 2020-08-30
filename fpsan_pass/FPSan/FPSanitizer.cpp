@@ -1176,6 +1176,56 @@ void FPSanitizer::handleFuncInit(Function *F){
   IRB.CreateCall(FuncInit, {ConsTotIns});
 }
 
+void
+FPSanitizer::handleMemCpy (CallInst *CI,
+    BasicBlock *BB,
+    Function *F,
+    std::string CallName) {
+
+  Instruction *I = dyn_cast<Instruction>(CI);
+  Instruction *Next = getNextInstruction(dyn_cast<Instruction>(CI), BB);
+  IRBuilder<> IRB(Next);
+  Module *M = F->getParent();
+
+  Type* VoidTy = Type::getVoidTy(M->getContext());
+
+  IntegerType* Int32Ty = Type::getInt32Ty(M->getContext());
+  IntegerType* Int1Ty = Type::getInt1Ty(M->getContext());
+  Type* Int64Ty = Type::getInt64Ty(M->getContext());
+  Type* PtrVoidTy = PointerType::getUnqual(Type::getInt8Ty(M->getContext()));
+
+  ConstantInt* instId = GetInstId(F, I);
+  const DebugLoc &instDebugLoc = I->getDebugLoc();
+  bool debugInfoAvail = false;;
+  unsigned int lineNum = 0;
+  unsigned int colNum = 0;
+  if (instDebugLoc) {
+    debugInfoAvail = true;
+    lineNum = instDebugLoc.getLine();
+    colNum = instDebugLoc.getCol();
+    if (lineNum == 0 && colNum == 0) debugInfoAvail = false;
+  }
+
+  ConstantInt* debugInfoAvailable = ConstantInt::get(Int1Ty, debugInfoAvail);
+  ConstantInt* lineNumber = ConstantInt::get(Int32Ty, lineNum);
+  ConstantInt* colNumber = ConstantInt::get(Int32Ty, colNum);
+
+  Value *Op1Addr = CI->getOperand(0);
+  Value *Op2Addr = CI->getOperand(1);
+  Value *size = CI->getOperand(2);
+  BitCastInst*
+    BCToAddr1 = new BitCastInst(Op1Addr, 
+        PointerType::getUnqual(Type::getInt8Ty(M->getContext())),"", I);
+  BitCastInst*
+    BCToAddr2 = new BitCastInst(Op2Addr, 
+        PointerType::getUnqual(Type::getInt8Ty(M->getContext())),"", I);
+  if (BitCastInst *BI = dyn_cast<BitCastInst>(Op1Addr)){
+    if(checkIfBitcastFromFP(BI)){
+      FuncInit = M->getOrInsertFunction("fpsan_handle_memcpy", VoidTy, PtrVoidTy, PtrVoidTy, Int64Ty);
+      IRB.CreateCall(FuncInit, {BCToAddr1, BCToAddr2, size});
+    }
+  }
+}
 
 void
 FPSanitizer::handleMathLibFunc (CallInst *CI,
@@ -1761,6 +1811,8 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
   else if (CallInst *CI = dyn_cast<CallInst>(I)){
     Function *Callee = CI->getCalledFunction();
     if (Callee) {
+      if(Callee->getName().startswith("llvm.memcpy"))
+        handleMemCpy(CI, BB, F, Callee->getName());
       if(isListedFunction(Callee->getName(), "mathFunc.txt"))
         handleMathLibFunc(CI, BB, F, Callee->getName());
       else if(isListedFunction(Callee->getName(), "functions.txt")){

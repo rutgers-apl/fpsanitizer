@@ -122,11 +122,11 @@ handleReal.cpp is a part of the shared library, type "y"
 when prompted, and run the program:
 
 ```
-    (gdb) break handleReal.cpp:179 if realRes->error >= 45
+    (gdb) break handleReal.cpp:177 if realRes->error >= 45
     (gdb) y
     (gdb) run
 ```
-Skip the first seven break. This instance computes the value for
+Skip the first eight break. This instance computes the value for
 the variable "z." 
 ```
     (gdb) continue
@@ -156,7 +156,7 @@ breakpoint that detects where branch flip occurs:
 
 ```
     (gdb) clear
-    (gdb) break handleReal.cpp:144
+    (gdb) break handleReal.cpp:140 if(realRes != computedRes)
     (gdb) continue
 ```
 At this point, the floating point result of "op1" causes a branch
@@ -168,16 +168,16 @@ flip. You can look at the trace of "op1" by calling
 ```
 You should see a trace of 4 instructions. You will notice that
 the first line of the trace for a subtraction operation
-(FSUB) shows that fp computed a positive value whereas
-mpfr computed a negative value. The prorgram at this point
+(FSUB) shows that fp computed a negative value whereas
+mpfr computed a positive value. The prorgram at this point
 compares op1 < 0. This means that fp computation will
 incorrectly evaluate op1 < 0.
 
 
 (4.2) Simpson's Rule (Section 5.2.2)
 
- The source code for simpson's rule can be found in the ccase
- studies directory. Form the PositDebug_Artifact director,
+ The source code for simpson's rule can be found in the case
+ studies directory. 
 ```
     $ cd case_studies/simpson
 ```
@@ -193,14 +193,14 @@ more than 45 bits of error.
 
 Run gdb, set break point to line 28 in SimpsonsRule.c, and start the program:
 ```
-    $ gdb simpsons.fp.o
+    $ gdb SimpsonsRule.fp.o
     (gdb) break 28
     (gdb) r
-    (gdb) break handleReal.cpp:179
+    (gdb) break handleReal.cpp:177
     (gdb) y
     (gdb) c
 ```
-handleReal.cpp:179 is a location in the runtime that
+handleReal.cpp:177 is a location in the runtime that
 explicitly checks whether an operation has more than or
 equal to 45 bits of error. When gdb breaks, look at the
 trace of the realRes:
