@@ -50,6 +50,7 @@ namespace {
     bool checkIfBitcastFromFP(BitCastInst *BI);
     void handleLoad(LoadInst *LI, BasicBlock *BB, Function *F);
     void handleMathLibFunc(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
+    void handleMemCpy(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
     void handlePositLibFunc(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
 		void handleCallInst (CallInst *CI, BasicBlock *BB, Function *F);
     bool isListedFunction(StringRef FN, std::string FileName);
