@@ -90,6 +90,7 @@ One can test the microbenchmarks using
 fpsanitizer with the following commands: 
 
 ```
+  export LD_LIBRARY_PATH=$FPSAN_HOME/fpsan_runtime/obj:$LD_LIBRARY_PATH
   cd fpsanitizer_test/
   python3 correctness_test.py
 ```
