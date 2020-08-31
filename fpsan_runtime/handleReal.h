@@ -29,21 +29,6 @@
 #include <unistd.h>
 #include <asm/unistd.h>
 
-#define MMAP_FLAGS (MAP_PRIVATE| MAP_ANONYMOUS| MAP_NORESERVE)
-#define MAX_STACK_SIZE 500
-#define MAX_SIZE 1000
-
-/* Assumption: float types are 4-byte aligned. */
-const size_t SS_PRIMARY_TABLE_ENTRIES = ((size_t) 4194304);//2^22
-const size_t SS_SEC_TABLE_ENTRIES = ((size_t) 16*(size_t) 1024 * (size_t) 1024); // 2^24
-const size_t PRIMARY_INDEX_BITS = 22;
-const size_t SECONDARY_INDEX_BITS = 24;
-const size_t SECONDARY_MASK = 0xffffff;
-
-#define debug 0
-#define debugtrace 0
-#define debugerror 0
-#define ERRORTHRESHOLD 45
 
 FILE * m_fpcore;
 FILE * m_errfile;
@@ -118,6 +103,38 @@ struct temp_entry{
 
 };
 
+#define MMAP_FLAGS (MAP_PRIVATE| MAP_ANONYMOUS| MAP_NORESERVE)
+#define MAX_STACK_SIZE 500
+#define MAX_SIZE 1000
+
+#define METADATA_AS_TRIE 1
+
+/* Assumption: float types are 4-byte aligned. */
+
+#ifdef METADATA_AS_TRIE
+
+const size_t SS_PRIMARY_TABLE_ENTRIES = ((size_t) 4194304);//2^22
+const size_t SS_SEC_TABLE_ENTRIES = ((size_t) 16*(size_t) 1024 * (size_t) 1024); // 2^24
+const size_t PRIMARY_INDEX_BITS = 22;
+const size_t SECONDARY_INDEX_BITS = 24;
+const size_t SECONDARY_MASK = 0xffffff;
+
+smem_entry ** m_shadow_memory;
+
+#else
+/* 2 million entries in the hash table */
+const size_t HASH_TABLE_ENTRIES = ((size_t) 2 * (size_t) 1024 * (size_t) 1024 * (size_t) 1024);
+
+smem_entry* m_shadow_memory;
+
+#endif
+
+#define debug 0
+#define debugtrace 0
+#define debugerror 0
+#define ERRORTHRESHOLD 45
+
+
 # if !defined(PREC_128) && !defined(PREC_256) && !defined(PREC_512) && !defined(PREC_1024) 
 #  define PREC_512
 # endif
@@ -142,7 +159,7 @@ size_t * m_lock_key_map;
 #endif
 
 temp_entry * m_shadow_stack;
-smem_entry ** m_shadow_memory;
+
 
 int m_prec_bits_f = 0;
 int m_prec_bits_d = 0;

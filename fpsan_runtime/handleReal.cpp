@@ -204,7 +204,6 @@ extern "C" void fpsan_init() {
     m_init_flag = true;
     size_t length = MAX_STACK_SIZE * sizeof(temp_entry);
 
-    size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(smem_entry *);
     m_shadow_stack =
       (temp_entry *)mmap(0, length, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
 #ifdef TRACING
@@ -213,8 +212,20 @@ extern "C" void fpsan_init() {
     assert(m_lock_key_map != (void *)-1);
 #endif    
 
-    m_shadow_memory =
+
+#ifdef METADATA_AS_TRIE
+    
+    size_t memLen = SS_PRIMARY_TABLE_ENTRIES * sizeof(smem_entry *);    
+    m_shadow_memory = 
       (smem_entry **)mmap(0, memLen, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
+
+#else
+    
+    size_t hash_size = (HASH_TABLE_ENTRIES) * sizeof(smem_entry);
+    m_shadow_memory = 
+      (smem_entry *) mmap(0, hash_size, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
+    
+#endif    
 
     assert(m_shadow_stack != (void *)-1);
     assert(m_shadow_memory != (void *)-1);
@@ -368,6 +379,8 @@ long double m_get_longdouble(temp_entry *real) {
   return mpfr_get_ld(real->val, MPFR_RNDN);
 }
 
+#ifdef METADATA_AS_TRIE
+
 smem_entry* m_get_shadowaddress(size_t address){
   size_t addrInt = address >> 2;
   size_t primary_index = (addrInt >> SECONDARY_INDEX_BITS );
@@ -386,6 +399,23 @@ smem_entry* m_get_shadowaddress(size_t address){
   }
   return realAddr;
 }
+
+#else
+
+smem_entry* m_get_shadowaddress (size_t address){
+
+  size_t addr_int = address >> 2;
+  size_t index = addr_int  % HASH_TABLE_ENTRIES;
+  smem_entry* realAddr = m_shadow_memory[index];
+  if(!realAddr->is_init){
+    realAddr->is_init = true;
+    mpfr_init2(realAddr->val, m_precision);
+  }
+  return realAddr;
+}
+
+#endif
+
 
 extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
   
@@ -502,6 +532,15 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
   size_t AddrInt = (size_t) Addr;
   smem_entry* dest = m_get_shadowaddress(AddrInt);
 
+#ifdef SELECTIVE
+  
+  double orig = (double) d;
+  if(orig != src->computed){
+    fpsan_store_tempmeta_fconst(src, d, 0); //for global variables
+    return;
+  }
+#endif
+  
   /* copy the metadata from shadow memory to temp metadata*/
   m_set_mpfr(&(src->val), &(dest->val));
 #ifdef TRACING  
@@ -567,6 +606,15 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
   size_t AddrInt = (size_t) Addr;
   smem_entry* dest = m_get_shadowaddress(AddrInt);
 
+#ifdef SELECTIVE
+  /* double value in the metadata space mismatches with the computed
+     value */
+  if(d != src->computed){
+    fpsan_store_tempmeta_dconst(src, d, 0); 
+    return;
+  }
+#endif
+  
   m_set_mpfr(&(src->val), &(dest->val));
   src->lineno = dest->lineno;
   src->computed = dest->computed;

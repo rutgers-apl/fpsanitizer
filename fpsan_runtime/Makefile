@@ -9,7 +9,10 @@ OPT=-O3
 PREC := $(if $(PRECISION),$(PRECISION), "PREC_512")
 #To enable tracing run - export SET_TRACING=TRACING
 TRACING := $(if $(SET_TRACING), $(SET_TRACING), "NO_TRACING")
-CXXFLAGS+= -D $(TRACING) -D $(PREC) -fPIC -g -std=c++11 -rdynamic -Wall -lmpfr -pthread
+
+#To enable selective execution
+SELECTIVE := $(if $(SET_SELECTIVE), $(SET_SELECTIVE), "NO_SELECTIVE")
+CXXFLAGS+= -D$(SELECTIVE) -D$(TRACING) -D $(PREC) -fPIC -g -std=c++11 -rdynamic -Wall -lmpfr -pthread
 
 
 INCPATH=-I. 
