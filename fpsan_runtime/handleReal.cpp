@@ -536,7 +536,6 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
   
   double orig = (double) d;
   if(orig != dest->computed){
-    printf("d: %.20f %.20f\n", orig, dest->computed);
     fpsan_store_tempmeta_fconst(src, d, 0); //for global variables
     return;
   }
