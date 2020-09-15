@@ -1682,10 +1682,6 @@ void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
     I->dump();
     exit(1);
   }
-  Type* OpType = FPT->getOperand(0)->getType();
-  Type* Int64Ty = Type::getInt64Ty(M->getContext());
-  IntegerType* Int1Ty = Type::getInt1Ty(M->getContext());
-  IntegerType* Int32Ty = Type::getInt32Ty(M->getContext());
   Type* VoidTy = Type::getVoidTy(M->getContext());
 
   ConstantInt* instId = GetInstId(F, I);
@@ -1699,10 +1695,6 @@ void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
     colNum = instDebugLoc.getCol();
     if (lineNum == 0 && colNum == 0) debugInfoAvail = false;
   }
-
-  ConstantInt* debugInfoAvailable = ConstantInt::get(Int1Ty, debugInfoAvail);
-  ConstantInt* lineNumber = ConstantInt::get(Int32Ty, lineNum);
-  ConstantInt* colNumber = ConstantInt::get(Int32Ty, colNum);
 
   CheckBranch = M->getOrInsertFunction("fpsan_handle_fptrunc", VoidTy, FPT->getType(), MPtrTy);
   IRB.CreateCall(CheckBranch, {FPT, InsIndex1});
