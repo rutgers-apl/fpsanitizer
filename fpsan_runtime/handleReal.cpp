@@ -129,6 +129,9 @@ extern "C" void fpsan_trace(temp_entry *current){
 
 // fpsan_check_branch, fpsan_check_conversion, fpsan_check_error are
 // functions that user can set breakpoint on
+extern "C" void fpsan_handle_fptrunc(float val, temp_entry* op1){
+  op1->computed = val;
+}
 
 extern "C" bool fpsan_check_branch_f(float op1d, temp_entry* op1,
 				     float op2d, temp_entry* op2,

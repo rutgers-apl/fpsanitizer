@@ -1666,6 +1666,28 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   IRB.CreateCall(FuncInit, {BOGEP, BO});
 }
 
+void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
+
+  Instruction *I = dyn_cast<Instruction>(FPT);
+  Instruction *Next = getNextInstruction(I, BB);
+  IRBuilder<> IRB(Next);
+  Module *M = F->getParent();
+
+  Value *InsIndex1;
+  bool res1 = handleOperand(I, FPT->getOperand(0), F, &InsIndex1);
+  if(!res1){
+    errs()<<"handleFPTrunc: Error !!! metadata not found for op:"<<"\n";
+    FPT->getOperand(0)->dump();
+    errs()<<"In Inst:"<<"\n";
+    I->dump();
+    exit(1);
+  }
+  Type* VoidTy = Type::getVoidTy(M->getContext());
+
+  CheckBranch = M->getOrInsertFunction("fpsan_handle_fptrunc", VoidTy, FPT->getType(), MPtrTy);
+  IRB.CreateCall(CheckBranch, {FPT, InsIndex1});
+}
+
 void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
 
   Instruction *I = dyn_cast<Instruction>(FCI);
@@ -1786,6 +1808,9 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
   }
   else if (FCmpInst *FCI = dyn_cast<FCmpInst>(I)){
     handleFcmp(FCI, BB, F);
+  }
+  else if (FPTruncInst *FPT = dyn_cast<FPTruncInst>(I)){
+    handleFPTrunc(FPT, BB, F);
   }
   else if (StoreInst *SI = dyn_cast<StoreInst>(I)){
     handleStore(SI, BB, F);
