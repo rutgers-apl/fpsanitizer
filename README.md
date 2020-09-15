@@ -123,7 +123,7 @@ handleReal.cpp is a part of the shared library, type "y"
 when prompted, and run the program:
 
 ```
-    (gdb) break handleReal.cpp:177 if realRes->error >= 45
+    (gdb) break handleReal.cpp:180 if realRes->error >= 45
     (gdb) y
     (gdb) run
 ```
@@ -139,7 +139,7 @@ expressions leading up to the computed value:
 ```
 You should be able to see a trace of 8 operations. For each
 line, the first value tells you the line number of the computation. The
-second value tells you which operations is executed, the
+second value tells you which operations are executed, the
 third value shows the line number for first operand,
 and the fourth value shows the line number for the
 second operand. The result of reals (mpfr) computation, the
@@ -157,7 +157,7 @@ breakpoint that detects where branch flip occurs:
 
 ```
     (gdb) clear
-    (gdb) break handleReal.cpp:140 if(realRes != computedRes)
+    (gdb) break handleReal.cpp:143 if(realRes != computedRes)
     (gdb) continue
 ```
 At this point, the floating point result of "op1" causes a branch
@@ -197,11 +197,11 @@ Run gdb, set break point to line 28 in SimpsonsRule.c, and start the program:
     $ gdb SimpsonsRule.fp.o
     (gdb) break 28
     (gdb) r
-    (gdb) break handleReal.cpp:177
+    (gdb) break handleReal.cpp:180
     (gdb) y
     (gdb) c
 ```
-handleReal.cpp:177 is a location in the runtime that
+handleReal.cpp:180 is a location in the runtime that
 explicitly checks whether an operation has more than or
 equal to 45 bits of error. When gdb breaks, look at the
 trace of the realRes:
