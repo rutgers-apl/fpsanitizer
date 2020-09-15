@@ -535,7 +535,7 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
 #ifdef SELECTIVE
   
   double orig = (double) d;
-  if(orig != src->computed){
+  if(orig != dest->computed){
     fpsan_store_tempmeta_fconst(src, d, 0); //for global variables
     return;
   }
@@ -609,7 +609,7 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
 #ifdef SELECTIVE
   /* double value in the metadata space mismatches with the computed
      value */
-  if(d != src->computed){
+  if(d != dest->computed){
     fpsan_store_tempmeta_dconst(src, d, 0); 
     return;
   }
@@ -619,7 +619,6 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
   src->lineno = dest->lineno;
   src->computed = dest->computed;
   src->opcode = dest->opcode;
-
 
 #ifdef TRACING  
   src->lock = m_key_stack_top; 
@@ -642,22 +641,12 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
     src->timestamp = dest->tmp_ptr->timestamp;
   }
   else{
-    if(debug)
+    if(debug){
       std::cout<<"__load_d copying default\n";
-#if 0
-    /* This looks redundant with fpsan_store_tempmeta_fconst operations */
-    src->op1_lock = 0;
-    src->op1_key = 0;
-    src->op2_lock = 0;
-    src->op2_key = 0;
-    src->lhs = NULL;
-    src->rhs = NULL;
-    src->timestamp = m_timestamp++;
-#endif    
+    }
     fpsan_store_tempmeta_dconst(src, d, 0); //for global variables
   }
 #endif
-  
 }
 
 void handle_math_d(fp_op opCode, double op1d, temp_entry *op, 
