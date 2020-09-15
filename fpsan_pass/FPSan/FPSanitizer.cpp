@@ -1684,18 +1684,6 @@ void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
   }
   Type* VoidTy = Type::getVoidTy(M->getContext());
 
-  ConstantInt* instId = GetInstId(F, I);
-  const DebugLoc &instDebugLoc = I->getDebugLoc();
-  bool debugInfoAvail = false;;
-  unsigned int lineNum = 0;
-  unsigned int colNum = 0;
-  if (instDebugLoc) {
-    debugInfoAvail = true;
-    lineNum = instDebugLoc.getLine();
-    colNum = instDebugLoc.getCol();
-    if (lineNum == 0 && colNum == 0) debugInfoAvail = false;
-  }
-
   CheckBranch = M->getOrInsertFunction("fpsan_handle_fptrunc", VoidTy, FPT->getType(), MPtrTy);
   IRB.CreateCall(CheckBranch, {FPT, InsIndex1});
 }
