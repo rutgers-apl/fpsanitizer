@@ -41,6 +41,7 @@ namespace {
     bool handleOperand(Instruction *I, Value* OP, Function *F, Value **InstIdx);
     void handleStore(StoreInst *SI, BasicBlock *BB, Function *F);
     void handleNewPhi(Function *F);
+    void handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F);
     void copyPhi(Instruction *I, Function *F);
     void handlePhi(PHINode *PN, BasicBlock *BB, Function *F);
     void handleSelect(SelectInst *SI, BasicBlock *BB, Function *F);

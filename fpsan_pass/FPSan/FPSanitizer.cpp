@@ -1666,6 +1666,48 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   IRB.CreateCall(FuncInit, {BOGEP, BO});
 }
 
+void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
+
+  Instruction *I = dyn_cast<Instruction>(FPT);
+  Instruction *Next = getNextInstruction(I, BB);
+  IRBuilder<> IRB(Next);
+  Module *M = F->getParent();
+
+  Value *InsIndex1;
+  bool res1 = handleOperand(I, FPT->getOperand(0), F, &InsIndex1);
+  if(!res1){
+    errs()<<"handleFPTrunc: Error !!! metadata not found for op:"<<"\n";
+    FPT->getOperand(0)->dump();
+    errs()<<"In Inst:"<<"\n";
+    I->dump();
+    exit(1);
+  }
+  Type* OpType = FPT->getOperand(0)->getType();
+  Type* Int64Ty = Type::getInt64Ty(M->getContext());
+  IntegerType* Int1Ty = Type::getInt1Ty(M->getContext());
+  IntegerType* Int32Ty = Type::getInt32Ty(M->getContext());
+  Type* VoidTy = Type::getVoidTy(M->getContext());
+
+  ConstantInt* instId = GetInstId(F, I);
+  const DebugLoc &instDebugLoc = I->getDebugLoc();
+  bool debugInfoAvail = false;;
+  unsigned int lineNum = 0;
+  unsigned int colNum = 0;
+  if (instDebugLoc) {
+    debugInfoAvail = true;
+    lineNum = instDebugLoc.getLine();
+    colNum = instDebugLoc.getCol();
+    if (lineNum == 0 && colNum == 0) debugInfoAvail = false;
+  }
+
+  ConstantInt* debugInfoAvailable = ConstantInt::get(Int1Ty, debugInfoAvail);
+  ConstantInt* lineNumber = ConstantInt::get(Int32Ty, lineNum);
+  ConstantInt* colNumber = ConstantInt::get(Int32Ty, colNum);
+
+  CheckBranch = M->getOrInsertFunction("fpsan_handle_fptrunc", VoidTy, FPT->getType(), MPtrTy);
+  IRB.CreateCall(CheckBranch, {FPT, InsIndex1});
+}
+
 void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
 
   Instruction *I = dyn_cast<Instruction>(FCI);
@@ -1786,6 +1828,9 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
   }
   else if (FCmpInst *FCI = dyn_cast<FCmpInst>(I)){
     handleFcmp(FCI, BB, F);
+  }
+  else if (FPTruncInst *FPT = dyn_cast<FPTruncInst>(I)){
+    handleFPTrunc(FPT, BB, F);
   }
   else if (StoreInst *SI = dyn_cast<StoreInst>(I)){
     handleStore(SI, BB, F);
