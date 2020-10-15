@@ -216,15 +216,12 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
               ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
               ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
             Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
-            GEPMap.insert(std::pair<Instruction *, Value *>(
-                  dyn_cast<Instruction>(UO), BOGEP));
+            GEPMap.insert(std::pair<Instruction *, Value *>(dyn_cast<Instruction>(UO), BOGEP));
 
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, Int32Ty,
-                MPtrTy);
+            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
             IRB.CreateCall(FuncInit, {BOGEP});
 
-            FuncInit =
-              M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
             IRBE.CreateCall(FuncInit, {BOGEP});
             index++;
             }
@@ -1727,12 +1724,10 @@ void FPSanitizer::handleFNeg(UnaryOperator *UO, BasicBlock *BB, Function *F) {
 
   std::string opName(I->getOpcodeName());
 
-  ComputeReal = M->getOrInsertFunction("fpsan_mpfr_fneg", VoidTy, Int32Ty,
-      MPtrTy, MPtrTy, Int32Ty);
+  ComputeReal = M->getOrInsertFunction("fpsan_mpfr_fneg", VoidTy, MPtrTy, MPtrTy, Int32Ty);
 
   IRB.CreateCall(ComputeReal, {InsIndex1, BOGEP, lineNumber});
-  MInsMap.insert(
-      std::pair<Instruction *, Instruction *>(I, dyn_cast<Instruction>(BOGEP)));
+  MInsMap.insert(std::pair<Instruction *, Instruction *>(I, dyn_cast<Instruction>(BOGEP)));
 }
 
 void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
@@ -1982,6 +1977,8 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
     if (Callee) {
       if(Callee->getName().startswith("llvm.memcpy"))
         handleMemCpy(CI, BB, F, Callee->getName());
+      if (Callee->getName().startswith("llvm.memset"))
+        handleMemset(CI, BB, F, Callee->getName());
       if(isListedFunction(Callee->getName(), "mathFunc.txt"))
         handleMathLibFunc(CI, BB, F, Callee->getName());
       else if(isListedFunction(Callee->getName(), "functions.txt")){

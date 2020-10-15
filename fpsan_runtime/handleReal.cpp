@@ -910,7 +910,7 @@ unsigned int m_check_cc(double op1,
 }
 #endif
 
-extern "C" void fpsan_mpfr_fneg(int buf_id, temp_entry *op1Idx, temp_entry *res,
+extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
     unsigned int linenumber) {
 
   mpfr_t zero;

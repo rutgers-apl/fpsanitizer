@@ -122,8 +122,8 @@ const size_t SECONDARY_MASK = 0xffffff;
 smem_entry ** m_shadow_memory;
 
 #else
-/* 2 million entries in the hash table */
-const size_t HASH_TABLE_ENTRIES = ((size_t) 2 * (size_t) 1024 * (size_t) 1024 * (size_t) 1024);
+/* 32 million entries in the hash table */
+const size_t HASH_TABLE_ENTRIES = ((size_t) 32 * (size_t) 1024 * (size_t) 1024);
 
 smem_entry * m_shadow_memory;
 
