@@ -107,7 +107,7 @@ struct temp_entry{
 #define MAX_STACK_SIZE 500
 #define MAX_SIZE 1000
 
-#define METADATA_AS_TRIE 1
+//#define METADATA_AS_TRIE 0
 
 /* Assumption: float types are 4-byte aligned. */
 
@@ -125,7 +125,7 @@ smem_entry ** m_shadow_memory;
 /* 2 million entries in the hash table */
 const size_t HASH_TABLE_ENTRIES = ((size_t) 2 * (size_t) 1024 * (size_t) 1024 * (size_t) 1024);
 
-smem_entry* m_shadow_memory;
+smem_entry * m_shadow_memory;
 
 #endif
 

@@ -201,6 +201,35 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             }
         }
       }
+      else if (UnaryOperator *UO = dyn_cast<UnaryOperator>(&I)) {
+        if (GEPMap.count(&I) != 0) {
+          continue;
+        }
+        switch (UO->getOpcode()) {
+          case Instruction::FNeg: {
+            Instruction *Next = getNextInstruction(UO, &BB);
+            IRBuilder<> IRBI(Next);
+            if (index - 1 > TotalAlloca) {
+              errs() << "Error:\n\n\n index > TotalAlloca " << index << ":"<< TotalAlloca << "\n";
+            }
+            Value *Indices[] = {
+              ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+            GEPMap.insert(std::pair<Instruction *, Value *>(
+                  dyn_cast<Instruction>(UO), BOGEP));
+
+            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, Int32Ty,
+                MPtrTy);
+            IRB.CreateCall(FuncInit, {BOGEP});
+
+            FuncInit =
+              M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+            IRBE.CreateCall(FuncInit, {BOGEP});
+            index++;
+            }
+        }
+      }
       else if (SIToFPInst *UI = dyn_cast<SIToFPInst>(&I)){
         Instruction *Next = getNextInstruction(UI, &BB);
         IRBuilder<> IRBI(Next);
@@ -851,7 +880,15 @@ long FPSanitizer::getTotalFPInst(Function *F){
   long TotalAlloca = 0;
   for (auto &BB : *F) {
     for (auto &I : BB) {
-      if (BinaryOperator* BO = dyn_cast<BinaryOperator>(&I)){
+      if (UnaryOperator *UO = dyn_cast<UnaryOperator>(&I)) {
+        switch (UO->getOpcode()) {
+          case Instruction::FNeg:
+            {
+              TotalAlloca++;
+            }
+        }
+      }
+      else if (BinaryOperator* BO = dyn_cast<BinaryOperator>(&I)){
         switch(BO->getOpcode()) {                                                                                                
           case Instruction::FAdd:
           case Instruction::FSub:
@@ -1599,6 +1636,53 @@ void FPSanitizer::handleReturn(ReturnInst *RI, BasicBlock *BB, Function *F){
   IRB.CreateCall(FuncInit, {ConsTotIns});
 }
 
+void FPSanitizer::handleFNeg(UnaryOperator *UO, BasicBlock *BB, Function *F) {
+  Instruction *I = dyn_cast<Instruction>(UO);
+  Instruction *Next = getNextInstruction(I, BB);
+  IRBuilder<> IRB(Next);
+  Module *M = F->getParent();
+
+  Value *InsIndex1;
+  bool res1 = handleOperand(I, UO->getOperand(0), F, &InsIndex1);
+  if (!res1) {
+    errs() << *F << "\n";
+    errs() << "handleBinOp: Error !!! metadata not found for op:"
+      << "\n";
+    errs() << *UO->getOperand(0);
+    errs() << "In Inst:"
+      << "\n";
+    errs() << *I;
+    exit(1);
+  }
+  Type *VoidTy = Type::getVoidTy(M->getContext());
+  IntegerType *Int32Ty = Type::getInt32Ty(M->getContext());
+
+  ConstantInt *instId = GetInstId(F, I);
+  const DebugLoc &instDebugLoc = I->getDebugLoc();
+  bool debugInfoAvail = false;
+  unsigned int lineNum = 0;
+  unsigned int colNum = 0;
+  if (instDebugLoc) {
+    debugInfoAvail = true;
+    lineNum = instDebugLoc.getLine();
+    colNum = instDebugLoc.getCol();
+    if (lineNum == 0 && colNum == 0)
+      debugInfoAvail = false;
+  }
+  ConstantInt *lineNumber = ConstantInt::get(Int32Ty, lineNum);
+
+  Value *BOGEP = GEPMap.at(I);
+
+  std::string opName(I->getOpcodeName());
+
+  ComputeReal = M->getOrInsertFunction("fpsan_mpfr_fneg", VoidTy, Int32Ty,
+      MPtrTy, MPtrTy, Int32Ty);
+
+  IRB.CreateCall(ComputeReal, {InsIndex1, BOGEP, lineNumber});
+  MInsMap.insert(
+      std::pair<Instruction *, Instruction *>(I, dyn_cast<Instruction>(BOGEP)));
+}
+
 void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   Instruction *I = dyn_cast<Instruction>(BO);
   Instruction *Next = getNextInstruction(I, BB);
@@ -1821,6 +1905,14 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
     }
   }
   else if (ExtractValueInst *EVI = dyn_cast<ExtractValueInst>(I)){
+  }
+  else if (UnaryOperator *UO = dyn_cast<UnaryOperator>(I)) {
+    switch (UO->getOpcode()) {
+      case Instruction::FNeg: 
+        {
+          handleFNeg(UO, BB, F);
+        }
+    }
   }
   else if (BinaryOperator* BO = dyn_cast<BinaryOperator>(I)){
     switch(BO->getOpcode()) {                                                                                                                                         

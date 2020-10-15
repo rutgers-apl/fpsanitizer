@@ -406,10 +406,9 @@ smem_entry* m_get_shadowaddress(size_t address){
 #else
 
 smem_entry* m_get_shadowaddress (size_t address){
-
   size_t addr_int = address >> 2;
   size_t index = addr_int  % HASH_TABLE_ENTRIES;
-  smem_entry* realAddr = m_shadow_memory[index];
+  smem_entry* realAddr = m_shadow_memory + index;
   if(!realAddr->is_init){
     realAddr->is_init = true;
     mpfr_init2(realAddr->val, m_precision);
@@ -885,6 +884,17 @@ unsigned int m_check_cc(double op1,
   return cbad;
 }
 #endif
+
+extern "C" void fpsan_mpfr_fneg(int buf_id, temp_entry *op1Idx, temp_entry *res,
+    unsigned int linenumber) {
+
+  mpfr_t zero;
+  mpfr_init2(zero, m_precision);
+  mpfr_set_d(zero, 0, MPFR_RNDN);
+
+  mpfr_sub(res->val, zero, op1Idx->val, MPFR_RNDN);
+  mpfr_clear(zero);
+}
 
 extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
 				   temp_entry* op2Idx,
