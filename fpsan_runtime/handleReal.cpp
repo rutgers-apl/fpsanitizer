@@ -418,6 +418,31 @@ smem_entry* m_get_shadowaddress (size_t address){
 
 #endif
 
+extern "C" void fpsan_handle_memset(void *toAddr, int val,
+    int size) {
+
+  size_t toAddrInt = (size_t)(toAddr);
+  for (int i = 0; i < size; i++) {
+    smem_entry *dst = m_get_shadowaddress(toAddrInt + i);
+    if (!dst->is_init) {
+      dst->is_init = true;
+      mpfr_init2(dst->val, m_precision);
+    }
+    mpfr_set_d(dst->val, val, MPFR_RNDN);
+
+#ifdef TRACING
+    dst->error = 0;
+    dst->lock = m_key_stack_top;
+    dst->key = m_lock_key_map[m_key_stack_top];
+    dst->tmp_ptr = 0;
+#endif
+
+    dst->is_init = true;
+    dst->lineno = 0;
+    dst->computed = val;
+    dst->opcode = CONSTANT;
+  }
+}
 
 extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
   
