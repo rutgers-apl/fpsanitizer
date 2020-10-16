@@ -406,10 +406,9 @@ smem_entry* m_get_shadowaddress(size_t address){
 #else
 
 smem_entry* m_get_shadowaddress (size_t address){
-
   size_t addr_int = address >> 2;
   size_t index = addr_int  % HASH_TABLE_ENTRIES;
-  smem_entry* realAddr = m_shadow_memory[index];
+  smem_entry* realAddr = m_shadow_memory + index;
   if(!realAddr->is_init){
     realAddr->is_init = true;
     mpfr_init2(realAddr->val, m_precision);
@@ -419,6 +418,31 @@ smem_entry* m_get_shadowaddress (size_t address){
 
 #endif
 
+extern "C" void fpsan_handle_memset(void *toAddr, int val,
+    int size) {
+
+  size_t toAddrInt = (size_t)(toAddr);
+  for (int i = 0; i < size; i++) {
+    smem_entry *dst = m_get_shadowaddress(toAddrInt + i);
+    if (!dst->is_init) {
+      dst->is_init = true;
+      mpfr_init2(dst->val, m_precision);
+    }
+    mpfr_set_d(dst->val, val, MPFR_RNDN);
+
+#ifdef TRACING
+    dst->error = 0;
+    dst->lock = m_key_stack_top;
+    dst->key = m_lock_key_map[m_key_stack_top];
+    dst->tmp_ptr = 0;
+#endif
+
+    dst->is_init = true;
+    dst->lineno = 0;
+    dst->computed = val;
+    dst->opcode = CONSTANT;
+  }
+}
 
 extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
   
@@ -885,6 +909,17 @@ unsigned int m_check_cc(double op1,
   return cbad;
 }
 #endif
+
+extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
+    unsigned int linenumber) {
+
+  mpfr_t zero;
+  mpfr_init2(zero, m_precision);
+  mpfr_set_d(zero, 0, MPFR_RNDN);
+
+  mpfr_sub(res->val, zero, op1Idx->val, MPFR_RNDN);
+  mpfr_clear(zero);
+}
 
 extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
 				   temp_entry* op2Idx,

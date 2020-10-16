@@ -46,12 +46,14 @@ namespace {
     void handlePhi(PHINode *PN, BasicBlock *BB, Function *F);
     void handleSelect(SelectInst *SI, BasicBlock *BB, Function *F);
     void handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F);
+    void handleFNeg(UnaryOperator *UO, BasicBlock *BB, Function *F);
     void handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F);
     void handleReturn(ReturnInst *RI, BasicBlock *BB, Function *F);
     bool checkIfBitcastFromFP(BitCastInst *BI);
     void handleLoad(LoadInst *LI, BasicBlock *BB, Function *F);
     void handleMathLibFunc(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
     void handleMemCpy(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
+    void handleMemset(CallInst *CI, BasicBlock *BB, Function *F, std::string CallName);
     void handlePositLibFunc(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
 		void handleCallInst (CallInst *CI, BasicBlock *BB, Function *F);
     bool isListedFunction(StringRef FN, std::string FileName);
