@@ -123,7 +123,7 @@ smem_entry ** m_shadow_memory;
 
 #else
 /* 32 million entries in the hash table */
-const size_t HASH_TABLE_ENTRIES = ((size_t) 32 * (size_t) 1024 * (size_t) 1024);
+const size_t HASH_TABLE_ENTRIES = ((size_t) 2 * (size_t) 1024 * (size_t) 1024);
 
 smem_entry * m_shadow_memory;
 
@@ -174,6 +174,7 @@ size_t m_key_counter = 0;
 #endif
 
 bool m_init_flag = false;
+bool m_start_slice = false;
 
 size_t varCount = 0;
 size_t infCount = 0;

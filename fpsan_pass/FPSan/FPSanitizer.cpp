@@ -1193,6 +1193,42 @@ FPSanitizer::handleCallInst (CallInst *CI,
   }
 }
 
+void FPSanitizer::handleStartSlice(CallInst *CI, Function *F) {
+  Function::iterator Fit = F->begin();
+  BasicBlock &BB = *Fit;
+  BasicBlock::iterator BBit = BB.begin();
+  Instruction *First = &*BBit;
+
+  Module *M = F->getParent();
+
+  Type *VoidTy = Type::getVoidTy(M->getContext());
+  IntegerType *Int32Ty = Type::getInt32Ty(M->getContext());
+  Type *PtrVoidTy = PointerType::getUnqual(Type::getInt8Ty(M->getContext()));
+
+  IRBuilder<> IRB(First);
+
+  Finish = M->getOrInsertFunction("fpsan_slice_start", VoidTy);
+  IRB.CreateCall(Finish, {});
+}
+
+void FPSanitizer::handleEndSlice(CallInst *CI, Function *F) {
+  Function::iterator Fit = F->begin();
+  BasicBlock &BB = *Fit;
+  BasicBlock::iterator BBit = BB.begin();
+  Instruction *First = &*BBit;
+
+  Module *M = F->getParent();
+
+  Type *VoidTy = Type::getVoidTy(M->getContext());
+  IntegerType *Int32Ty = Type::getInt32Ty(M->getContext());
+  Type *PtrVoidTy = PointerType::getUnqual(Type::getInt8Ty(M->getContext()));
+
+  IRBuilder<> IRB(CI);
+
+  Finish = M->getOrInsertFunction("fpsan_slice_end", VoidTy);
+  IRB.CreateCall(Finish, {});
+}
+
 void FPSanitizer::handleFuncInit(Function *F){
   Function::iterator Fit = F->begin();
   BasicBlock &BB = *Fit; 
@@ -1471,6 +1507,10 @@ bool FPSanitizer::handleOperand(Instruction *I, Value* OP, Function *F, Value** 
     else{
       return false;
     }
+  }
+  else if(isa<UndefValue>(OP)){
+    *ConsInsIndex = UndefValue::get(MPtrTy);
+    return true;
   }
   else{
     return false;
@@ -1977,12 +2017,17 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
     if (Callee) {
       if(Callee->getName().startswith("llvm.memcpy"))
         handleMemCpy(CI, BB, F, Callee->getName());
-      if (Callee->getName().startswith("llvm.memset"))
+      else if (Callee->getName().startswith("llvm.memset"))
         handleMemset(CI, BB, F, Callee->getName());
-      if(isListedFunction(Callee->getName(), "mathFunc.txt"))
+      else if(isListedFunction(Callee->getName(), "mathFunc.txt"))
         handleMathLibFunc(CI, BB, F, Callee->getName());
       else if(isListedFunction(Callee->getName(), "functions.txt")){
         handleCallInst(CI, BB, F);
+      }
+      else if (Callee->getName().startswith("end_slice")) {
+        handleEndSlice(CI, F);
+      } else if (Callee->getName().startswith("start_slice")) {
+        handleStartSlice(CI, F);
       }
     }
     else if(CallSite(I).isIndirectCall()){
