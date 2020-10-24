@@ -1174,7 +1174,7 @@ FPSanitizer::handleCallInst (CallInst *CI,
     if(isFloatType(OpTy[i])){
       Instruction *OpIns = dyn_cast<Instruction>(Op[i]);
       Value *OpIdx;
-      bool res = handleOperand(I, Op[i], F, &OpIdx);
+      bool res = handleOperand(Op[i], &OpIdx);
       if(!res){
         errs()<<"\nError !!! metadata not found for operand:\n";
         Op[i]->dump();
@@ -1281,7 +1281,7 @@ void FPSanitizer::handleMemset(CallInst *CI, BasicBlock *BB, Function *F, std::s
   Value *size = CI->getOperand(2);
   if (BitCastInst *BI = dyn_cast<BitCastInst>(Op1Addr)) {
     if (checkIfBitcastFromFP(BI)) {
-      FuncInit = M->getOrInsertFunction("fpsan_handle_memset", VoidTy, Int32Ty,
+      FuncInit = M->getOrInsertFunction("fpsan_handle_memset", VoidTy,
           PtrVoidTy, Int8Ty, Int64Ty);
       IRB.CreateCall(FuncInit, {Op1Addr, Op2Val, size});
     }
@@ -1291,7 +1291,7 @@ void FPSanitizer::handleMemset(CallInst *CI, BasicBlock *BB, Function *F, std::s
     if (BitCastInst *BI = dyn_cast<BitCastInst>(Addr)) {
       if (checkIfBitcastFromFP(BI)) {
         FuncInit = M->getOrInsertFunction("fpsan_handle_memset", VoidTy,
-            Int32Ty, PtrVoidTy, Int8Ty, Int64Ty);
+            PtrVoidTy, Int8Ty, Int64Ty);
         IRB.CreateCall(FuncInit, {Addr, Op2Val, size});
       }
     }
@@ -1417,7 +1417,7 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
     OpTy[i] = Op[i]->getType(); // this should be of float
     Op1Call[i] = false;
     if(isFloatType(OpTy[i])){
-      bool res = handleOperand(I, Op[i], F, &ConsIdx[i]);
+      bool res = handleOperand(Op[i], &ConsIdx[i]);
       if(!res){
         errs()<<"\nError !!! metadata not found for operand:\n";
         Op[i]->dump();
@@ -1458,13 +1458,10 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
   IRB.CreateCall(FuncInit, {BOGEP, CI});
 }
 
-bool FPSanitizer::handleOperand(Instruction *I, Value* OP, Function *F, Value** ConsInsIndex){
-  Module *M = F->getParent();
+bool FPSanitizer::handleOperand(Value* OP, Value** ConsInsIndex){
   long Idx = 0;
 
-  IRBuilder<> IRB(I);
   Instruction *OpIns = dyn_cast<Instruction>(OP);	
-  Type* Int64Ty = Type::getInt64Ty(M->getContext());
 
   if(ConsMap.count(OP) != 0){
     *ConsInsIndex = ConsMap.at(OP);
@@ -1485,7 +1482,8 @@ bool FPSanitizer::handleOperand(Instruction *I, Value* OP, Function *F, Value** 
   }
   else if(isa<FPTruncInst>(OP) || isa<FPExtInst>(OP)){
     Value *OP1 = OpIns->getOperand(0);
-
+    return handleOperand(OP1, ConsInsIndex);
+/*
     if(isa<FPTruncInst>(OP1) || isa<FPExtInst>(OP1)){
       Value *OP2 = (dyn_cast<Instruction>(OP1))->getOperand(0);
       if(MInsMap.count(dyn_cast<Instruction>(OP2)) != 0){ //TODO need recursive func
@@ -1507,6 +1505,7 @@ bool FPSanitizer::handleOperand(Instruction *I, Value* OP, Function *F, Value** 
     else{
       return false;
     }
+    */
   }
   else if(isa<UndefValue>(OP)){
     *ConsInsIndex = UndefValue::get(MPtrTy);
@@ -1564,7 +1563,7 @@ void FPSanitizer::handleStore(StoreInst *SI, BasicBlock *BB, Function *F){
   }
   if(isFloatType(StoreTy) || BTFlag){
     Value* InsIndex;
-    bool res = handleOperand(SI, OP, F, &InsIndex);
+    bool res = handleOperand(OP, &InsIndex);
     if(res){ //handling registers
       SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow", VoidTy, PtrVoidTy, MPtrTy);
       IRB.CreateCall(SetRealTemp, {BCToAddr, InsIndex});
@@ -1601,7 +1600,7 @@ void FPSanitizer::handleNewPhi(Function *F){
 
         if (IncValue == PN) continue; //TODO
         Value* InsIndex;
-        bool res = handleOperand(it->first, IncValue, F, &InsIndex);
+        bool res = handleOperand(IncValue, &InsIndex);
         if(!res){
           errs()<<"handleNewPhi:Error !!! metadata not found for operand:\n";
           IncValue->dump();
@@ -1648,7 +1647,7 @@ void FPSanitizer::handleSelect(SelectInst *SI, BasicBlock *BB, Function *F){
   Value *OP1 = SI->getOperand(0);
 
   Value* InsIndex2, *InsIndex3;
-  bool res1 = handleOperand(I, SI->getOperand(1), F, &InsIndex2);
+  bool res1 = handleOperand(SI->getOperand(1), &InsIndex2);
   if(!res1){
     errs()<<"\nhandleSelect: Error !!! metadata not found for op:"<<"\n";
     SI->getOperand(1)->dump();
@@ -1656,7 +1655,7 @@ void FPSanitizer::handleSelect(SelectInst *SI, BasicBlock *BB, Function *F){
     I->dump();
     exit(1);
   }
-  bool res2 = handleOperand(I, SI->getOperand(2), F, &InsIndex3);
+  bool res2 = handleOperand(SI->getOperand(2), &InsIndex3);
   if(!res2){
     errs()<<"\nhandleSelect: Error !!! metadata not found for op:"<<"\n";
     SI->getOperand(1)->dump();
@@ -1702,7 +1701,7 @@ void FPSanitizer::handleReturn(ReturnInst *RI, BasicBlock *BB, Function *F){
   if (RI->getNumOperands() != 0){
     Value *OP = RI->getOperand(0);
     if(isFloatType(OP->getType())){
-      bool res = handleOperand(dyn_cast<Instruction>(RI), OP, F, &OpIdx);
+      bool res = handleOperand(OP, &OpIdx);
       if(!res){
         errs()<<"\nhandleReturn: Error !!! metadata not found for op:"<<"\n";
         OP->dump();
@@ -1732,7 +1731,7 @@ void FPSanitizer::handleFNeg(UnaryOperator *UO, BasicBlock *BB, Function *F) {
   Module *M = F->getParent();
 
   Value *InsIndex1;
-  bool res1 = handleOperand(I, UO->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(UO->getOperand(0), &InsIndex1);
   if (!res1) {
     errs() << *F << "\n";
     errs() << "handleBinOp: Error !!! metadata not found for op:"
@@ -1777,7 +1776,7 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   Module *M = F->getParent();
 
   Value* InsIndex1, *InsIndex2; 
-  bool res1 = handleOperand(I, BO->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(BO->getOperand(0), &InsIndex1);
   if(!res1){
     errs()<<"handleBinOp: Error !!! metadata not found for op:"<<"\n";
     BO->getOperand(0)->dump();
@@ -1786,7 +1785,7 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
     exit(1);
   }
 
-  bool res2 = handleOperand(I, BO->getOperand(1), F, &InsIndex2);
+  bool res2 = handleOperand(BO->getOperand(1), &InsIndex2);
   if(!res2){
     errs()<<"handleBinOp: Error !!! metadata not found for op:"<<"\n";
     BO->getOperand(1)->dump();
@@ -1845,7 +1844,7 @@ void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
   Module *M = F->getParent();
 
   Value *InsIndex1;
-  bool res1 = handleOperand(I, FPT->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(FPT->getOperand(0), &InsIndex1);
   if(!res1){
     errs()<<"handleFPTrunc: Error !!! metadata not found for op:"<<"\n";
     FPT->getOperand(0)->dump();
@@ -1867,7 +1866,7 @@ void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
   Module *M = F->getParent();
 
   Value *InsIndex1, *InsIndex2;
-  bool res1 = handleOperand(I, FCI->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(FCI->getOperand(0), &InsIndex1);
   if(!res1){
     errs()<<"handleFcmp: Error !!! metadata not found for op:"<<"\n";
     FCI->getOperand(0)->dump();
@@ -1875,7 +1874,7 @@ void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
     I->dump();
     exit(1);
   }
-  bool res2 = handleOperand(I, FCI->getOperand(1), F, &InsIndex2);
+  bool res2 = handleOperand(FCI->getOperand(1), &InsIndex2);
   if(!res2){
     errs()<<"handleFcmp: Error !!! metadata not found for op:"<<"\n";
     FCI->getOperand(1)->dump();

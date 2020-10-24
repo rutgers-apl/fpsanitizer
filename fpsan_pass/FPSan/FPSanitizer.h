@@ -38,7 +38,7 @@ namespace {
     Instruction* getNextInstruction(Instruction *I, BasicBlock *BB);
     Instruction* getNextInstructionNotPhi(Instruction *I, BasicBlock *BB);
     void findInterestingFunctions(Function *F);
-    bool handleOperand(Instruction *I, Value* OP, Function *F, Value **InstIdx);
+    bool handleOperand(Value* OP, Value **InstIdx);
     void handleStore(StoreInst *SI, BasicBlock *BB, Function *F);
     void handleNewPhi(Function *F);
     void handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F);
