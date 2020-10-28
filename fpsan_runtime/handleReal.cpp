@@ -1512,12 +1512,31 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
   temp_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
   assert(argIdx < MAX_STACK_SIZE && "Arg index is more than MAX_STACK_SIZE");
 
-  /* Santosh: Check if we will ever have src == NULL with arguments */
-  if(src != NULL){
+  if (!m_start_slice) {
+    mpfr_set_flt(dest->val, op, MPFR_RNDN);
+
+#ifdef TRACING  
+    dest->lock = m_key_stack_top;
+    dest->key = m_lock_key_map[m_key_stack_top];
+    dest->op1_lock = 0;
+    dest->op1_key = 0;
+    dest->op2_lock = 0;
+    dest->op2_key = 0;
+    dest->lhs = NULL;
+    dest->rhs = NULL;
+    dest->error = 0;
+    dest->timestamp = m_timestamp++;
+#endif
+
+    dest->lineno = 0;
+    dest->opcode = CONSTANT;
+    dest->computed = op;
+  }
+  else if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
-    dest->opcode = src->opcode;
     dest->lineno = src->lineno;
+    dest->opcode = src->opcode;
     dest->is_init = true;
 
 #ifdef TRACING    
@@ -1532,16 +1551,12 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
     dest->op2_key = src->op2_key;
     dest->rhs = src->rhs;
     dest->timestamp = src->timestamp;
-
 #endif
-    
   }
   else{
     fpsan_store_tempmeta_fconst(dest, op, 0);
-    //    m_store_shadow_fconst(dest, op, 0);
     dest->is_init = true;
   }
-
 }
 
 extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
@@ -1549,8 +1564,27 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
   temp_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
   assert(argIdx < MAX_STACK_SIZE && "Arg index is more than MAX_STACK_SIZE");
 
-  /* Santosh: Check if we will ever have src == NULL with arguments */
-  if(src != NULL){
+  if (!m_start_slice) {
+    mpfr_set_d(dest->val, op, MPFR_RNDN);
+
+#ifdef TRACING  
+    dest->lock = m_key_stack_top;
+    dest->key = m_lock_key_map[m_key_stack_top];
+    dest->op1_lock = 0;
+    dest->op1_key = 0;
+    dest->op2_lock = 0;
+    dest->op2_key = 0;
+    dest->lhs = NULL;
+    dest->rhs = NULL;
+    dest->error = 0;
+    dest->timestamp = m_timestamp++;
+#endif
+
+    dest->lineno = 0;
+    dest->opcode = CONSTANT;
+    dest->computed = op;
+  }
+  else if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
     dest->lineno = src->lineno;
@@ -1575,8 +1609,7 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
     
   }
   else{
-    fpsan_store_tempmeta_fconst(dest, op, 0);
-    //    m_store_shadow_dconst(dest, op, 0);
+    fpsan_store_tempmeta_dconst(dest, op, 0);
     dest->is_init = true;
   }
 }
@@ -1691,10 +1724,24 @@ extern "C" void fpsan_mpfr_sqrtf(temp_entry* op1,
   handle_math_d(SQRT, op1d, op1, computedRes, res, linenumber);
  
 }
+
 extern "C" void fpsan_mpfr_floor(temp_entry* op1, 
                                  double op1d,
                                  temp_entry* res, 
                                  double computedRes,
+                                 unsigned long long int instId, 
+                                 bool debugInfoAvail, 
+                                 unsigned int linenumber, 
+                                 unsigned int colnumber){
+
+  handle_math_d(FLOOR, op1d, op1, computedRes, res, linenumber);
+  
+}
+
+extern "C" void fpsan_mpfr_llvm_f(temp_entry* op1, 
+                                 float op1d,
+                                 temp_entry* res, 
+                                 float computedRes,
                                  unsigned long long int instId, 
                                  bool debugInfoAvail, 
                                  unsigned int linenumber, 
@@ -1806,6 +1853,18 @@ extern "C" void fpsan_mpfr_llvm_floor(temp_entry* op1Idx,
 
 }
 
+extern "C" void fpsan_mpfr_llvm_floor_f(temp_entry* op1Idx, 
+				      double op1d,
+				      temp_entry* res, 
+				      double computedRes,
+				      unsigned long long int instId, 
+				      bool debugInfoAvail, 
+				      unsigned int linenumber, 
+				      unsigned int colnumber){
+
+  handle_math_d(FLOOR, op1d, op1Idx, computedRes, res, linenumber);
+
+}
 extern "C" void fpsan_mpfr_exp(temp_entry* op1Idx, 
 			   double op1d,
 			   temp_entry* res, 
