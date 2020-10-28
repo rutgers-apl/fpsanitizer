@@ -1,0 +1,105 @@
+###########################################################
+# $Id: makefile.vms,v 7.2 1996/09/03 13:20:41 bsmith Exp $
+#
+# SPECtools95
+#   This makefile should NOT be changed other than to customize for a
+#   particular benchmark. Users may overide variables by placing them
+#   in the Makefile.spec file or by using the "runspsec" program to
+#   build the Makefile.spec file for them
+############################################################
+#     BENCHMARK  -- standard definitions for this benchmark
+#
+NUMBER  = 099
+NAME    = go
+EXEBASE = go
+BASE1   = g2 g22 g23 g25 g26 g27a g27b g28 g29 g2eye g2jlib2
+BASE2   = g2jos g2list g2reas g2s2 g2s3 g2shp
+BASE    = $(BASE1) $(BASE2)
+SRC     = $(addsuffix .c,$(BASE))
+OFILES  = $(addsuffix $(OBJ),$(BASE))
+OLIST   = $(subst $(space),$(plus),$(OFILES))
+LIBS    =
+CFLAGS  =
+LFLAGS  =
+
+### VERSION WILDCARD LISTS
+VWLIST = $(subst $(space),$(plus),$(addsuffix $(VOBJ),$(BASE)))
+
+### DEBUGGER BUILD FLAGS
+DCFLAGS  = /deb=all/noopt
+DLFLAGS  = /deb
+
+############ DEFINES #################################
+## standard definitions for SPEC
+## these may be overriden Makefile.spec
+
+BENCHMARK = $(NUMBER).$(NAME)
+OBJ     = .obj
+LIB     = .olb
+EXE     = .exe
+VOBJ    = .obj$(wildcard)
+CC      = cc
+LN      = link
+ECHO    = write sys$$output
+
+ifeq ($(FDO),pass1)
+        FDO_FLAGS=$(PASS1)$(PASS1_CFLAGS)
+	FDO_LDFLAGS=$(PASS1_LDFLAGS)
+endif
+ifeq ($(FDO),pass2)
+        FDO_FLAGS=$(PASS2)$(PASS2_CFLAGS)
+	FDO_LDFLAGS=$(PASS2_LDFLAGS)
+endif
+
+############# VENDOR #################################
+# where we include any vendor specific information
+
+#ifneq ($(NOINC),yes)
+#	include Makefile.spec
+#endif
+
+############ functions for VMS strings ###############
+empty :=
+space := $(empty) $(empty)
+plus  := +
+wildcard := ;*
+
+############ TARGETS ###################################
+
+error: 
+	@- $(ECHO) "This makefile is only used for building binaries now"
+	@- $(ECHO) "to run the SPEC suite please use 'runspec'"
+	@- $(ECHO) ""
+	
+
+build: $(EXEBASE)$(EXE)
+
+test:
+	@- $(ECHO) "target $(EXEBASE)$(EXE)"
+	@- $(ECHO) "SPACE  <$(space)>"
+	@- $(ECHO) "PLUS   <$(plus)>"
+	@- $(ECHO) "OFILES $(OFILES)"
+	@- $(ECHO) "OLIST  $(OLIST)"
+	@- $(ECHO) "VWLIST $(VWLIST)"
+
+$(EXEBASE)$(EXE): $(OFILES)
+	$(LN)$(LFLAGS)/exe=$@ $(OLIST)
+
+.PHONY:	clean clobber
+
+clean:
+ifeq ($(OBJ),.c)
+	delete *.err;* *.out;*
+else
+	delete $(VWLIST)  *.err;* *.out;*
+endif
+
+clobber: 
+	delete $(VWLIST)
+	delete $(EXEBASE)$(EXE)$(wildcard)
+
+############# general rules ###########################
+%$(OBJ):%.c 
+	$(CC)$(CFLAGS) $<
+
+
