@@ -914,6 +914,7 @@ void slice16_2(GLcontext *ctx, int i){
   START_PROFILE
     (*ctx->Driver.TriangleFunc)( ctx, i-2, i-1, i, i );
   END_PROFILE( ctx->PolygonTime, ctx->PolygonCount, 1 )
+  
   end_slice();
 }
 

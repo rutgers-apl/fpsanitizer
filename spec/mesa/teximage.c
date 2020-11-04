@@ -144,8 +144,6 @@
  */
 
 
-
-
 /*
  * Compute log base 2 of n.
  * If n isn't an exact power of two return -1.

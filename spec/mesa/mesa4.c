@@ -87,6 +87,13 @@
 #define WIDTH 1280									/* wwlk */
 #define HEIGHT 1024									/* wwlk */
 
+static void start_slice(){
+  __asm__ __volatile__ ("");
+}
+
+static void end_slice(){
+  __asm__ __volatile__ ("");
+}
      
 /*
  * The object we're rendering:
@@ -168,10 +175,22 @@ static void ReadMesh(const char *filename)
  */
 static void DrawMesh_Slice( int i )
 {
-  int j;
-
   glEnd();
 }
+
+static void DrawMesh_Slice2( int i )
+{
+  int j;
+  for (j=0; j < NumColumns; j++) {
+    int k0 = ( i    * NumColumns + j) * 3; 
+    int k1 = ((i+1) * NumColumns + j) * 3;
+    glNormal3fv(SurfaceN + k0);
+    glVertex3fv(SurfaceV + k0);
+    glNormal3fv(SurfaceN + k1);
+    glVertex3fv(SurfaceV + k1);
+  }
+}
+
 
 static void DrawMesh( void )
 {
@@ -179,14 +198,7 @@ static void DrawMesh( void )
 
    for (i=0; i < NumRows-1; i++) {
      glBegin(GL_TRIANGLE_STRIP);
-     for (j=0; j < NumColumns; j++) {
-       int k0 = ( i    * NumColumns + j) * 3; 
-       int k1 = ((i+1) * NumColumns + j) * 3;
-       glNormal3fv(SurfaceN + k0);
-       glVertex3fv(SurfaceV + k0);
-       glNormal3fv(SurfaceN + k1);
-       glVertex3fv(SurfaceV + k1);
-     }
+     DrawMesh_Slice2(i);
      DrawMesh_Slice(i);
    }
 }
@@ -215,6 +227,15 @@ static void SPECWriteIntermediateImage( FILE *fip, FILE *fop, int width, int hei
 }
     
      
+static void Rotate_Slice( FILE *fip, FILE *fop, int width, int height, const void *buffer, int i ){
+  start_slice();
+  glPushMatrix();
+  glRotatef(-Xrot, 1, 0, 0);
+  glRotatef(Yrot, 0, 1, 0);
+  glRotatef(-90, 1, 0, 0);
+  SPECWriteIntermediateImage(fip, fop, width, height, buffer, i); 
+  end_slice();
+}
 /*
  * This is the main rendering function.  We simply render the surface 
  * 'frames' times with different rotations.
@@ -243,52 +264,65 @@ static void Render( int frames, int width, int height, const void *buffer  )
    Yrot = -5.0F*(float)(frames-1);								/* wwlk */
    
    for (i=0; i<frames; i++) {
-      /* wwlk
-	   *
-	   * Limit Yrot to range 0-360
-	   * 
-	   * This is standard recommended practice in OpenGL
-	   * progamming.  Remember, OpenGL specifies angles
-	   * in degrees, not radians.  They'll get converted
-	   * to radians by Mesa, and Mesa says PI=3.1415926.
-	   *
-	   *
-	   */
+     /* wwlk
+      *
+      * Limit Yrot to range 0-360
+      * 
+      * This is standard recommended practice in OpenGL
+      * progamming.  Remember, OpenGL specifies angles
+      * in degrees, not radians.  They'll get converted
+      * to radians by Mesa, and Mesa says PI=3.1415926.
+      *
+      *
+      */
 
-	  if (Yrot > 360.0F) {
-		  while (Yrot > 360.0F) {
-			  Yrot = Yrot - 360.0F;								/* wwlk */
-		  }
-	  }
-	  else if (Yrot < 0.0F) {									/* wwlk */
-			while (Yrot < 0.0F ) {								/* wwlk */
-				Yrot = Yrot + 360.0F;							/* wwlk */
-			}
-	  }															/* wwlk */
-	  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
-      glPushMatrix();
-      glRotatef(-Xrot, 1, 0, 0);
-      glRotatef(Yrot, 0, 1, 0);
-      glRotatef(-90, 1, 0, 0);
-     
-      SPECWriteIntermediateImage(fip, fop, width, height, buffer, i); 
+     if (Yrot > 360.0F) {
+       while (Yrot > 360.0F) {
+         Yrot = Yrot - 360.0F;								/* wwlk */
+       }
+     }
+     else if (Yrot < 0.0F) {									/* wwlk */
+       while (Yrot < 0.0F ) {								/* wwlk */
+         Yrot = Yrot + 360.0F;							/* wwlk */
+       }
+     }															/* wwlk */
+     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
 
-      DrawMesh();
-     
-      glPopMatrix();
-     
-	 
-      Yrot += 5.0F;												/* wwlk */
+     Rotate_Slice(fip, fop, width, height, buffer, i);
+     DrawMesh();
+
+     glPopMatrix();
+
+
+     Yrot += 5.0F;												/* wwlk */
    }
 }
-     
      
 /*
  * Called to setup the viewport, projection and viewing parameters. 
  */
 static void Reshape( int width, int height ) 
 {
+   static GLfloat texPlane[4] = {0.0, 0.0, 0.1, 0.0}; 
+   GLubyte texture[256];
+   for (int i=0; i<256; i++) {
+      if ((i % 16) < 1) {
+         texture[i] = 0;
+      }
+      else {
+         texture[i] = 255;
+      }
+   }
    GLfloat w = (float) width / (float) height; 
+   glTexImage1D(GL_TEXTURE_1D, 0, 1, 256, 0,
+                GL_LUMINANCE, GL_UNSIGNED_BYTE, texture);
+   glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+   glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); 
+   glEnable(GL_TEXTURE_1D);
+     
+   glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_OBJECT_LINEAR); 
+   glTexGenfv(GL_S, GL_OBJECT_PLANE, texPlane); 
+   glEnable(GL_TEXTURE_GEN_S);
    glViewport( 0, 0, width, height );
    glMatrixMode( GL_PROJECTION );
    glLoadIdentity();
@@ -306,8 +340,6 @@ static void Reshape( int width, int height )
 static void Init( void )
 {
    GLint i;
-   GLubyte texture[256];
-   static GLfloat texPlane[4] = {0.0, 0.0, 0.1, 0.0}; 
    static GLfloat blue[4] = {0.2, 0.2, 1.0, 1.0}; 
    static GLfloat white[4] = {1.0, 1.0, 1.0, 1.0}; 
 
@@ -379,24 +411,6 @@ static void Init( void )
    glEnable(GL_DEPTH_TEST);
      
    /* Setup 1-D texture map to render lines of constant Z */ 
-   for (i=0; i<256; i++) {
-      if ((i % 16) < 1) {
-         texture[i] = 0;
-      }
-      else {
-         texture[i] = 255;
-      }
-   }
-   glTexImage1D(GL_TEXTURE_1D, 0, 1, 256, 0,
-                GL_LUMINANCE, GL_UNSIGNED_BYTE, texture);
-   glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
-   glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); 
-   glEnable(GL_TEXTURE_1D);
-     
-   glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_OBJECT_LINEAR); 
-   glTexGenfv(GL_S, GL_OBJECT_PLANE, texPlane); 
-   glEnable(GL_TEXTURE_GEN_S);
-     
    Reshape(WIDTH, HEIGHT);
 }
      
@@ -432,6 +446,7 @@ static void WriteImage( const char *filename, int width, int height,
      
 int main(int argc, char *argv[])
 {
+  start_slice();
    OSMesaContext ctx;
    void *buffer;
    int frames = 1000;
@@ -500,6 +515,6 @@ int main(int argc, char *argv[])
      
    /* destroy the context */
    OSMesaDestroyContext( ctx );
-     
+   end_slice();
    return 0;
 }

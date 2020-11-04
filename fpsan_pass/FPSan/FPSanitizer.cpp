@@ -1405,6 +1405,9 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
   else if(CallName == "llvm.floor.f64"){
     funcName = "fpsan_mpfr_llvm_floor";
   }
+  else if(CallName == "llvm.floor.f32"){
+    funcName = "fpsan_mpfr_llvm_floor_f";
+  }
   else if(CallName == "llvm.fabs.f64"){
     funcName = "fpsan_mpfr_llvm_fabs";
   }
@@ -2030,7 +2033,6 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
       }
     }
     else if(CallSite(I).isIndirectCall()){
-      llvm::errs()<<"float type\n";
       handleCallInst(CI, BB, F);
       // long TotalFPInst = getTotalFPInst(CI->getCalledFunction()); 
       // if(TotalFPInst > 0){

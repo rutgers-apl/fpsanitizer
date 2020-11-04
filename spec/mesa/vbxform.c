@@ -1146,7 +1146,6 @@ void gl_transform_vb_part1( GLcontext *ctx, GLboolean allDone )
  * Callers:  gl_transform_vb_part1(), glDrawArraysEXT()
  */
 void slice1( GLcontext *ctx, GLboolean allDone ){
-  start_slice();
    struct vertex_buffer *VB = ctx->VB;
 #ifdef PROFILE
    GLdouble t0 = gl_time();
@@ -1171,11 +1170,9 @@ void slice1( GLcontext *ctx, GLboolean allDone ){
          VB->ClipAndMask = 0;
       }
    }
-  end_slice();
 }
 
 void slice2( GLcontext *ctx, GLboolean allDone ){
-  start_slice();
    struct vertex_buffer *VB = ctx->VB;
    /* Apply the projection matrix to the Eye coordinates, resulting in
     * Clip coordinates.  Also, compute the ClipMask for each vertex.
@@ -1194,7 +1191,6 @@ void slice2( GLcontext *ctx, GLboolean allDone ){
    if (ctx->Light.Enabled) {
       shade_vertices(ctx);
    }
-  end_slice();
 }
 
 void slice3( GLcontext *ctx, GLboolean allDone ){
@@ -1224,7 +1220,6 @@ void slice3( GLcontext *ctx, GLboolean allDone ){
 }
 
 void slice4( GLcontext *ctx, GLboolean allDone ){
-  start_slice();
    struct vertex_buffer *VB = ctx->VB;
    /* Use the viewport parameters to transform vertices from Clip
     * coordinates to Window coordinates.
@@ -1243,8 +1238,6 @@ void slice4( GLcontext *ctx, GLboolean allDone ){
    ctx->VertexTime += gl_time() - t0;
    ctx->VertexCount += VB->Count - VB->Start;
 #endif
-
-  end_slice();
 }
 
 void slice5( GLcontext *ctx, GLboolean allDone ){
