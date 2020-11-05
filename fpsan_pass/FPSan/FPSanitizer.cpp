@@ -1106,7 +1106,6 @@ FPSanitizer::getNextInstructionNotPhi(Instruction *I, BasicBlock *BB){
 }
 
 void FPSanitizer::findInterestingFunctions(Function *F){
-
   long TotalFPInst = getTotalFPInst(F); 
   if(TotalFPInst > 0){
     std::string name = F->getName();
@@ -1398,8 +1397,13 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
 
   std::string funcName;
 
-
-  if(CallName == "llvm.ceil.f64"){
+  if (CallName == "llvm.cos.f64") {
+    funcName = "fpsan_mpfr_llvm_cos_f64";
+  }
+  else if (CallName == "llvm.sin.f64") {
+    funcName = "fpsan_mpfr_llvm_sin_f64";
+  }
+  else if(CallName == "llvm.ceil.f64"){
     funcName = "fpsan_mpfr_llvm_ceil";
   }
   else if(CallName == "llvm.floor.f64"){
@@ -2026,18 +2030,9 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
       else if(isListedFunction(Callee->getName(), "functions.txt")){
         handleCallInst(CI, BB, F);
       }
-      else if (Callee->getName().startswith("end_slice")) {
-        handleEndSlice(CI, F);
-      } else if (Callee->getName().startswith("start_slice")) {
-        handleStartSlice(CI, F);
-      }
     }
     else if(CallSite(I).isIndirectCall()){
       handleCallInst(CI, BB, F);
-      // long TotalFPInst = getTotalFPInst(CI->getCalledFunction()); 
-      // if(TotalFPInst > 0){
-      //  handleCallInst(CI, BB, F);
-      //  }
     }
   }     
 }
@@ -2108,6 +2103,23 @@ bool FPSanitizer::runOnModule(Module &M) {
     AllFuncList.push_back(&F);
   } 
 
+  for (auto &F : M) {
+    if (F.isDeclaration()) continue;
+    for (auto &BB : F) {
+      for (auto &I : BB) {
+        if (CallInst *CI = dyn_cast<CallInst>(&I)){
+          Function *Callee = CI->getCalledFunction();
+          if (Callee) {
+            if (Callee->getName().startswith("end_slice")) {
+              handleEndSlice(CI, &F);
+            } else if (Callee->getName().startswith("start_slice")) {
+              handleStartSlice(CI, &F);
+            }
+          }
+        }     
+      }
+    }
+  }
   int instId = 0;
   //instrument interesting instructions
   Instruction *LastPhi = NULL;
