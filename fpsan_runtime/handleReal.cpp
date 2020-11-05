@@ -248,7 +248,6 @@ extern "C" void fpsan_init() {
       (smem_entry **)mmap(0, memLen, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
 
 #else
-    
     size_t hash_size = (HASH_TABLE_ENTRIES) * sizeof(smem_entry);
     m_shadow_memory = 
       (smem_entry *) mmap(0, hash_size, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
@@ -302,9 +301,11 @@ extern "C" void fpsan_init_store_shadow_dconst(smem_entry *op, double d,
   if (!m_start_slice) {
     return;
   }
-  mpfr_init2(op->val, m_precision);
+  if(!op->is_init){
+    op->is_init = true;
+    mpfr_init2(op->val, m_precision);
+  }
   m_store_shadow_dconst(op, d, linenumber);
-
 }
 
 extern "C" void fpsan_init_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
@@ -312,9 +313,11 @@ extern "C" void fpsan_init_store_shadow_fconst(smem_entry *op, float f, unsigned
   if (!m_start_slice) {
     return;
   }
-  mpfr_init2(op->val, m_precision);
+  if(!op->is_init){
+    op->is_init = true;
+    mpfr_init2(op->val, m_precision);
+  }
   m_store_shadow_fconst(op, f, linenumber);
-
 }
 
 int m_isnan(mpfr_t real){
@@ -352,7 +355,6 @@ void m_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
   op->lineno = linenumber;
   op->opcode = CONSTANT;
   op->computed = f;
-
 }
 
 extern "C" void fpsan_store_tempmeta_dconst(temp_entry *op, double d, unsigned int linenumber) {
@@ -1815,6 +1817,19 @@ extern "C" void fpsan_mpfr_cos(temp_entry* op1,
 
 }
 
+extern "C" void fpsan_mpfr_llvm_cos_f64(temp_entry* op1, 
+			       double op1d,
+			       temp_entry* res, 
+			       double computedRes,
+			       unsigned long long int instId, 
+			       bool debugInfoAvail, 
+			       unsigned int linenumber, 
+			       unsigned int colnumber){
+
+  handle_math_d(COS, op1d, op1, computedRes, res, linenumber);
+
+}
+
 extern "C" void fpsan_mpfr_atan(temp_entry* op1, 
 				double op1d,
 				temp_entry* res, 
@@ -2173,6 +2188,15 @@ extern "C" void fpsan_mpfr_sinh(temp_entry* op1, temp_entry* res,
 }
 
 extern "C" void fpsan_mpfr_sin(temp_entry* op1, temp_entry* res,
+			       double op1d, double computedRes,
+			       unsigned long long int instId,
+			       bool debugInfoAvail, unsigned int linenumber,
+			       unsigned int colnumber){
+  handle_math_d(SIN, op1d, op1, computedRes, res, linenumber);
+
+}
+
+extern "C" void fpsan_mpfr_llvm_sin_f64(temp_entry* op1, temp_entry* res,
 			       double op1d, double computedRes,
 			       unsigned long long int instId,
 			       bool debugInfoAvail, unsigned int linenumber,
