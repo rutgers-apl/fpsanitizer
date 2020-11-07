@@ -2103,23 +2103,6 @@ bool FPSanitizer::runOnModule(Module &M) {
     AllFuncList.push_back(&F);
   } 
 
-  for (auto &F : M) {
-    if (F.isDeclaration()) continue;
-    for (auto &BB : F) {
-      for (auto &I : BB) {
-        if (CallInst *CI = dyn_cast<CallInst>(&I)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if (Callee->getName().startswith("end_slice")) {
-              handleEndSlice(CI, &F);
-            } else if (Callee->getName().startswith("start_slice")) {
-              handleStartSlice(CI, &F);
-            }
-          }
-        }     
-      }
-    }
-  }
   int instId = 0;
   //instrument interesting instructions
   Instruction *LastPhi = NULL;
@@ -2172,6 +2155,23 @@ bool FPSanitizer::runOnModule(Module &M) {
     GEPMap.clear(); 
     ConsMap.clear(); 
   } 
+  for (auto &F : M) {
+    if (F.isDeclaration()) continue;
+    for (auto &BB : F) {
+      for (auto &I : BB) {
+        if (CallInst *CI = dyn_cast<CallInst>(&I)){
+          Function *Callee = CI->getCalledFunction();
+          if (Callee) {
+            if (Callee->getName().startswith("end_slice")) {
+              handleEndSlice(CI, &F);
+            } else if (Callee->getName().startswith("start_slice")) {
+              handleStartSlice(CI, &F);
+            }
+          }
+        }     
+      }
+    }
+  }
   for (auto &F : M) {
     if (F.isDeclaration()) continue;
     if(F.getName() == "main"){
