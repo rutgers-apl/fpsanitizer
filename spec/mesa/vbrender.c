@@ -737,16 +737,13 @@ static void copy_vertex( struct vertex_buffer *vb, GLuint dst, GLuint src )
  *                   GL_FALSE = calling because buffer is full.
  */
 void slice11(GLcontext *ctx){
-  start_slice();
   struct vertex_buffer *VB = ctx->VB;
   START_PROFILE
     (*ctx->Driver.PointsFunc)( ctx, 0, VB->Count-1 );
   END_PROFILE( ctx->PointTime, ctx->PointCount, VB->Count )
-  end_slice();
 }
 
 void slice12(GLcontext *ctx){
-  start_slice();
   struct vertex_buffer *VB = ctx->VB;
   if (VB->ClipOrMask) {
     GLuint i;
@@ -771,11 +768,9 @@ void slice12(GLcontext *ctx){
         ctx->StippleCounter = 0;
     }
   }
-  end_slice();
 }
 
 void slice13(GLcontext *ctx){
-  start_slice();
   struct vertex_buffer *VB = ctx->VB;
   if (VB->ClipOrMask) {
     GLuint i;
@@ -799,11 +794,9 @@ void slice13(GLcontext *ctx){
       END_PROFILE( ctx->LineTime, ctx->LineCount, 1 )
     }
   }
-  end_slice();
 }
 
 void slice14(GLcontext *ctx){
-  start_slice();
   struct vertex_buffer *VB = ctx->VB;
   {
     GLuint i;
@@ -825,11 +818,9 @@ void slice14(GLcontext *ctx){
       i++;
     }
   }
-  end_slice();
 }
 
 void slice15(GLcontext *ctx){
-  start_slice();
   struct vertex_buffer *VB = ctx->VB;
    GLuint vlist[VB_SIZE];
   if (VB->ClipOrMask) {
@@ -869,11 +860,9 @@ void slice15(GLcontext *ctx){
       }
     }
   }
-  end_slice();
 }
 
 void slice16_1(GLcontext *ctx, int i){
-  start_slice();
   GLuint vlist[VB_SIZE];
   struct vertex_buffer *VB = ctx->VB;
   if (VB->ClipMask[i-2] | VB->ClipMask[i-1] | VB->ClipMask[i]) {
@@ -904,29 +893,27 @@ void slice16_1(GLcontext *ctx, int i){
         render_triangle( ctx, i-2, i-1, i, i );
     }
   }
-  end_slice();
 }
 
 void slice16_2(GLcontext *ctx, int i){
-  start_slice();
-  GLuint vlist[VB_SIZE];
+  //start_slice();
   struct vertex_buffer *VB = ctx->VB;
-  START_PROFILE
-    (*ctx->Driver.TriangleFunc)( ctx, i-2, i-1, i, i );
-  END_PROFILE( ctx->PolygonTime, ctx->PolygonCount, 1 )
-  
-  end_slice();
+  for (i=2;i<VB->Count;i++) {
+    GLuint vlist[VB_SIZE];
+    START_PROFILE
+      (*ctx->Driver.TriangleFunc)( ctx, i-2, i-1, i, i );
+    END_PROFILE( ctx->PolygonTime, ctx->PolygonCount, 1 )
+  }
+  //end_slice();
 }
 
 void slice16_3(GLcontext *ctx, int i){
-  start_slice();
   GLuint vlist[VB_SIZE];
   struct vertex_buffer *VB = ctx->VB;
   if (i&1)
     render_triangle( ctx, i, i-1, i-2, i );
   else
     render_triangle( ctx, i-2, i-1, i, i );
-  end_slice();
 }
 
 void slice16(GLcontext *ctx){
@@ -942,9 +929,8 @@ void slice16(GLcontext *ctx){
     /* no vertices were clipped */
     GLuint i;
     if (ctx->DirectTriangles) {
-      for (i=2;i<VB->Count;i++) {
         slice16_2(ctx, i);
-      }
+      
     }
     else {
       for (i=2;i<VB->Count;i++) {

@@ -173,9 +173,13 @@ static void ReadMesh(const char *filename)
 /*
  * Draw the surface mesh.
  */
-static void DrawMesh_Slice( int i )
+static void DrawMesh_Slice( )
 {
-  glEnd();
+  start_slice();
+  for (int i=0; i < NumRows-1; i++) {
+    glEnd();
+  }
+  end_slice();
 }
 
 static void DrawMesh_Slice2( int i )
@@ -195,12 +199,11 @@ static void DrawMesh_Slice2( int i )
 static void DrawMesh( void )
 {
    int i, j;
-
    for (i=0; i < NumRows-1; i++) {
      glBegin(GL_TRIANGLE_STRIP);
      DrawMesh_Slice2(i);
-     DrawMesh_Slice(i);
    }
+   DrawMesh_Slice();
 }
      
 /* This is to write out some intermediate output so as to ensure that
@@ -228,13 +231,11 @@ static void SPECWriteIntermediateImage( FILE *fip, FILE *fop, int width, int hei
     
      
 static void Rotate_Slice( FILE *fip, FILE *fop, int width, int height, const void *buffer, int i ){
-  start_slice();
   glPushMatrix();
   glRotatef(-Xrot, 1, 0, 0);
   glRotatef(Yrot, 0, 1, 0);
   glRotatef(-90, 1, 0, 0);
   SPECWriteIntermediateImage(fip, fop, width, height, buffer, i); 
-  end_slice();
 }
 /*
  * This is the main rendering function.  We simply render the surface 
@@ -446,7 +447,6 @@ static void WriteImage( const char *filename, int width, int height,
      
 int main(int argc, char *argv[])
 {
-  start_slice();
    OSMesaContext ctx;
    void *buffer;
    int frames = 1000;
@@ -515,6 +515,5 @@ int main(int argc, char *argv[])
      
    /* destroy the context */
    OSMesaDestroyContext( ctx );
-   end_slice();
    return 0;
 }

@@ -9,19 +9,19 @@ CPPFLAGS := -g -std=c11  -lmpfr -lm  -lpthread
 CFLAGS= -fno-slp-vectorize -std=c11 -L$(FPSAN_HOME)/fpsan_runtime/obj -lfpsanitizer -lmpfr -lm  -lstdc++ -L$(FPSAN_HOME)/tbb/build -ltbb -I$(MPFR_HOME)/include
 CXXFLAGS :=  -g -I . -I ./libutil -DSPEC_CPU -DNDEBUG -I. -DFN -DFAST -DCONGRAD_TMP_VECTORS -DDSLASH_TMP_LINKS   -fno-strict-aliasing -DSPEC_CPU_LP64  
 
-all: lbm lbm_fp
+all: mesa mesa_fp
 
-lbm_fp: $(OBJ_FILES_FP)
+mesa_fp: $(OBJ_FILES_FP)
 	$(CC) $(CPPFLAGS) -o $@ $^ $(CFLAGS) 
 
 $(OBJ_DIR)/%.fp.o: $(SRC_DIR)/%.c
 	$(CC) $(CXXFLAGS) -c -o $@ $< 
 
-lbm: $(OBJ_FILES)
+mesa: $(OBJ_FILES)
 	$(GCC) $(CPPFLAGS) -o $@ $^ 
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	$(GCC) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -rf lbm lbm_fp lbm.o lbm *.out *.o *.dSYM
+	rm -rf mesa mesa_fp mesa.o mesa *.out *.o *.dSYM
