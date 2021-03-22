@@ -982,12 +982,29 @@ extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
   if (!m_start_slice) {
     return;
   }
+
   mpfr_t zero;
-  mpfr_init2(zero, m_precision);
+  mpfr_init2(zero, m_precision[buf_id].index);
   mpfr_set_d(zero, 0, MPFR_RNDN);
 
   mpfr_sub(res->val, zero, op1Idx->val, MPFR_RNDN);
   mpfr_clear(zero);
+#ifdef TRACING
+  res->op1_lock = op1Idx->op1_lock;
+  res->op2_lock = op1Idx->op2_lock;
+  res->op1_key = op1Idx->op1_key;
+  res->op2_key = op1Idx->op2_key;
+  res->lock = op1Idx->lock;
+  res->key = op1Idx->key;
+  res->lhs = op1Idx->lhs;
+  res->rhs = op1Idx->rhs;
+  res->timestamp = op1Idx->timestamp;
+  res->error = op1Idx->error;
+#endif
+
+  res->inst_id = op1Idx->inst_id;
+  res->opcode = op1Idx->opcode;
+  res->computed = -op1Idx->computed;
 }
 
 extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
