@@ -5,14 +5,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 
-static cl::opt<int> Precision("fpsan-precision",
-    cl::desc("default mpfr precision is initialized to 512"),
-    cl::Hidden, cl::init(512));
-
-static cl::opt<int> ENV("fpsan-with-type",
-    cl::desc("shadow execution with mpfr"),
-    cl::Hidden, cl::init(2));
-
 void FPSanitizer::addFunctionsToList(std::string FN) {
   std::ofstream myfile;
   myfile.open("functions.txt", std::ios::out|std::ios::app);
@@ -128,13 +120,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
               Value *Op1 = BO->getOperand(0);
               Value *Op2 = BO->getOperand(1);
 
-
-              FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-              IRB.CreateCall(FuncInit, {BOGEP});
-
-              FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-              IRBE.CreateCall(FuncInit, {BOGEP});
-
               index++;
 
               if(isa<ConstantFP>(Op1)){
@@ -145,10 +130,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                   ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
                 Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
                 GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op1), BOGEP));
-
-
-                FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-                IRB.CreateCall(FuncInit, {BOGEP});
 
                 if(isFloat(Op1->getType())){
                   FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, Op1->getType(), Int32Ty);
@@ -162,10 +143,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                 IRB.CreateCall(FuncInit, {BOGEP, Op1, lineNumber});
                 ConsMap.insert(std::pair<Value*, Value*>(Op1, BOGEP));
 
-
-                FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-                IRBE.CreateCall(FuncInit, {BOGEP});
-
                 index++;
               }
               if(isa<ConstantFP>(Op2)){
@@ -176,10 +153,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                   ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
                 Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
                 GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op2), BOGEP));
-
-
-                FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-                IRB.CreateCall(FuncInit, {BOGEP});
 
                 if(isFloat(Op2->getType())){
 
@@ -194,8 +167,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                 IRB.CreateCall(FuncInit, {BOGEP, Op2, lineNumber});
                 ConsMap.insert(std::pair<Value*, Value*>(Op2, BOGEP));
 
-                FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-                IRBE.CreateCall(FuncInit, {BOGEP});
                 index++;
               }
             }
@@ -218,11 +189,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
             GEPMap.insert(std::pair<Instruction *, Value *>(dyn_cast<Instruction>(UO), BOGEP));
 
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
             index++;
             }
         }
@@ -238,10 +204,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
         Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
         GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(UI), BOGEP));
 
-
-        FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-        IRB.CreateCall(FuncInit, {BOGEP});
-
         if(isFloat(UI->getType())){
           FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, UI->getType(), Int32Ty);
         }
@@ -252,8 +214,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
         IRBI.CreateCall(FuncInit, {BOGEP, UI, lineNumber});
         ConsMap.insert(std::pair<Value*, Value*>(UI, BOGEP));
 
-        FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-        IRBE.CreateCall(FuncInit, {BOGEP});
         index++;
       }
       else if (BitCastInst *UI = dyn_cast<BitCastInst>(&I)){
@@ -268,9 +228,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
           Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
           GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(UI), BOGEP));
 
-          FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-          IRB.CreateCall(FuncInit, {BOGEP});
-
           if(isFloat(UI->getType())){
             FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, UI->getType(), Int32Ty);
           }
@@ -280,8 +237,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
           IRBI.CreateCall(FuncInit, {BOGEP, UI, lineNumber});
           ConsMap.insert(std::pair<Value*, Value*>(UI, BOGEP));
-          FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-          IRBE.CreateCall(FuncInit, {BOGEP});
 
           index++;
         }
@@ -297,10 +252,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
         Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
         GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(UI), BOGEP));
 
-
-        FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-        IRB.CreateCall(FuncInit, {BOGEP});
-
         if(isFloat(UI->getType())){
           FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, UI->getType(), Int32Ty);
         }
@@ -311,9 +262,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
         }
         IRBI.CreateCall(FuncInit, {BOGEP, UI, lineNumber});
         ConsMap.insert(std::pair<Value*, Value*>(UI, BOGEP));
-
-        FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-        IRBE.CreateCall(FuncInit, {BOGEP});
 
         index++;
       }
@@ -351,10 +299,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
           Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
           GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op1), BOGEP));
 
-
-          FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-          IRB.CreateCall(FuncInit, {BOGEP});
-
           if(isFloat(Op1->getType())){
             FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, Op1->getType(), Int32Ty);
           }
@@ -371,8 +315,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             IRB.CreateCall(FuncInit, {BOGEP, Op1, lineNumber});
           ConsMap.insert(std::pair<Value*, Value*>(Op1, BOGEP));
 
-          FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-          IRBE.CreateCall(FuncInit, {BOGEP});
           index++;
         }
         if(isa<ConstantFP>(Op2) || Op2Call){
@@ -383,10 +325,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
           Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
           GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op2), BOGEP));
-
-
-          FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-          IRB.CreateCall(FuncInit, {BOGEP});
 
           if(isFloat(Op2->getType())){
             FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, Op2->getType(), Int32Ty);
@@ -405,10 +343,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             IRB.CreateCall(FuncInit, {BOGEP, Op2, lineNumber});
           ConsMap.insert(std::pair<Value*, Value*>(Op2, BOGEP));
 
-
-          FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-          IRBE.CreateCall(FuncInit, {BOGEP});
-
           index++;
         }
       }
@@ -422,13 +356,7 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
           Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
           GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
 
-
           GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-          FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-          IRB.CreateCall(FuncInit, {BOGEP});
-
-          FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-          IRBE.CreateCall(FuncInit, {BOGEP});
 
           index++;
         }
@@ -447,11 +375,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
 
             GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
 
             index++;
           }
@@ -464,13 +387,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
 
             GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
-
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
 
             index++;
           }
@@ -511,16 +427,10 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
                 GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op[i]), BOGEP));
 
-
-                FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-                IRB.CreateCall(FuncInit, {BOGEP});
-
                 if(isFloat(Op[i]->getType())){
-
                   FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
                 }
                 else if(isDouble(Op[i]->getType())){
-
                   FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
                 }
 
@@ -533,9 +443,55 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                   IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
                 ConsMap.insert(std::pair<Value*, Value*>(Op[i], BOGEP));
 
+                index++;
+              }
+            }
+          }
+          else{
+            if (isFloatType(CI->getType())) {
+              if (index - 1 > TotalAlloca) {
+                errs() << "Error:\n\n\n index > TotalAlloca " << index << ":"
+                  << TotalAlloca << "\n";
+              }
+              Value *Indices[] = {
+                ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+                ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+              Value *BOGEP = IRB.CreateGEP(Alloca, Indices, "my_gep");
 
-                FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-                IRBE.CreateCall(FuncInit, {BOGEP});
+              GEPMap.insert(std::pair<Instruction *, Value *>(&I, BOGEP));
+
+              index++;
+            }
+            size_t NumOperands = CI->getNumArgOperands();
+            Value *Op[NumOperands];
+            Type *OpTy[NumOperands];
+            bool Op1Call[NumOperands];
+            for (int i = 0; i < NumOperands; i++) {
+              Op[i] = CI->getArgOperand(i);
+              OpTy[i] = Op[i]->getType(); // this should be of float
+              Op1Call[i] = false;
+              if (isa<ConstantFP>(Op[i])) {
+                if (index - 1 > TotalAlloca) {
+                  errs() << "Error:\n\n\n index > TotalAlloca " << index << ":"
+                    << TotalAlloca << "\n";
+                }
+                Value *Indices[] = {
+                  ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+                  ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+                Value *BOGEP = IRB.CreateGEP(Alloca, Indices, "my_gep");
+
+                GEPMap.insert(std::pair<Instruction *, Value *>(
+                      dyn_cast<Instruction>(Op[i]), BOGEP));
+
+                if(isFloat(Op[i]->getType())){
+                  FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
+                }
+                else if(isDouble(Op[i]->getType())){
+                  FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
+                }
+
+                IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
+                ConsMap.insert(std::pair<Value *, Value *>(Op[i], BOGEP));
 
                 index++;
               }
@@ -552,13 +508,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
 
             GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
-
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
 
             index++;
           }
@@ -583,10 +532,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
               GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op[i]), BOGEP));
 
-
-              FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-              IRB.CreateCall(FuncInit, {BOGEP});
-
               if(isFloat(Op[i]->getType())){
 
                 FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
@@ -598,10 +543,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
               IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
               ConsMap.insert(std::pair<Value*, Value*>(Op[i], BOGEP));
-
-
-              FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-              IRBE.CreateCall(FuncInit, {BOGEP});
 
               index++;
             }
@@ -620,9 +561,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
             GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(FCI->getOperand(0)), BOGEP));
 
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
             if(isFloat(FCI->getOperand(0)->getType())){
 
               FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, FCI->getOperand(0)->getType(), Int32Ty);
@@ -636,8 +574,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             IRB.CreateCall(FuncInit, {BOGEP, FCI->getOperand(0), lineNumber});
             ConsMap.insert(std::pair<Value*, Value*>(FCI->getOperand(0), BOGEP));
 
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
             index++;
           }
           if(isa<ConstantFP>((FCI->getOperand(1)))){
@@ -651,9 +587,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(FCI->getOperand(1)), BOGEP));
 
 
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
             if(isFloat(FCI->getOperand(1)->getType())){
               FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, FCI->getOperand(1)->getType(), Int32Ty);
             }
@@ -662,10 +595,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             }
             IRB.CreateCall(FuncInit, {BOGEP, FCI->getOperand(1), lineNumber});
             ConsMap.insert(std::pair<Value*, Value*>(FCI->getOperand(1), BOGEP));
-
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
 
             index++;
           }
@@ -683,10 +612,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
             GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(SI->getOperand(1)), BOGEP));
 
-
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
             if(isFloat(SI->getOperand(1)->getType())){
 
               FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, SI->getOperand(1)->getType(), Int32Ty);
@@ -698,9 +623,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             IRB.CreateCall(FuncInit, {BOGEP, SI->getOperand(1), lineNumber});
             ConsMap.insert(std::pair<Value*, Value*>(SI->getOperand(1), BOGEP));
 
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
             index++;
           }
           if(isa<ConstantFP>((SI->getOperand(2)))){
@@ -713,9 +635,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
             GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(SI->getOperand(2)), BOGEP));
 
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
             if(isFloat(SI->getOperand(2)->getType())){
 
               FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, SI->getOperand(2)->getType(), Int32Ty);
@@ -726,9 +645,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             }
             IRB.CreateCall(FuncInit, {BOGEP, SI->getOperand(2), lineNumber});
             ConsMap.insert(std::pair<Value*, Value*>(SI->getOperand(2), BOGEP));
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
 
             index++;
           }
@@ -746,13 +662,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
           GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
 
-
-          FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-          IRB.CreateCall(FuncInit, {BOGEP});
-
-          FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-          IRBE.CreateCall(FuncInit, {BOGEP});
-
           index++;
         }
         for (unsigned PI = 0, PE = PN->getNumIncomingValues(); PI != PE; ++PI) {
@@ -769,9 +678,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
             GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(IncValue), BOGEP));
 
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
             if(isFloat(IncValue->getType())){
 
               FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, IncValue->getType(), Int32Ty);
@@ -782,9 +688,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             }
             IRB.CreateCall(FuncInit, {BOGEP, IncValue, lineNumber});
             ConsMap.insert(std::pair<Value*, Value*>(IncValue, BOGEP));
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
 
             index++;
           }
@@ -804,9 +707,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
               GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op), BOGEP));
 
-              FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-              IRB.CreateCall(FuncInit, {BOGEP});
-
               if(isFloat(Op->getType())){
                 FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, Op->getType(), Int32Ty);
               }
@@ -815,9 +715,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
               }
               IRB.CreateCall(FuncInit, {BOGEP, Op, lineNumber});
               ConsMap.insert(std::pair<Value*, Value*>(Op, BOGEP));
-
-              FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-              IRBE.CreateCall(FuncInit, {BOGEP});
 
               index++;
             }
@@ -991,7 +888,21 @@ long FPSanitizer::getTotalFPInst(Function *F){
               }
             }
           }
-
+          else{
+            if (isFloatType(CI->getType())) {
+              TotalAlloca++;
+            }
+            size_t NumOperands = CI->getNumArgOperands();
+            Value *Op[NumOperands];
+            Type *OpTy[NumOperands];
+            for (int i = 0; i < NumOperands; i++) {
+              Op[i] = CI->getArgOperand(i);
+              OpTy[i] = Op[i]->getType(); // this should be of float
+              if (isa<ConstantFP>(Op[i])) {
+                TotalAlloca++;
+              }
+            }
+          }
         }
         else{//indirect
           if(isFloatType(CI->getType())){
@@ -1004,7 +915,7 @@ long FPSanitizer::getTotalFPInst(Function *F){
           for(int i = 0; i < NumOperands; i++){
             Op[i] = CI->getArgOperand(i);
             OpTy[i] = Op[i]->getType(); // this should be of float
-
+          
             if(isa<ConstantFP>(Op[i])){
               TotalAlloca++;
             }
@@ -1125,7 +1036,6 @@ void FPSanitizer::handleFuncMainInit(Function *F){
   Type* VoidTy = Type::getVoidTy(M->getContext());
   Type* Int64Ty = Type::getInt64Ty(M->getContext());
 
-  Constant* Prec = ConstantInt::get(Type::getInt64Ty(M->getContext()), Precision);
   Finish = M->getOrInsertFunction("fpsan_init", VoidTy);
   long TotIns = 0;
 
@@ -1456,20 +1366,12 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
   HandleFunc = M->getOrInsertFunction(funcName, FunctionType::get(IRB.getVoidTy(), ArgsTy, false));
   IRB.CreateCall(HandleFunc, ArgsVal);
   MInsMap.insert(std::pair<Instruction*, Instruction*>(I, dyn_cast<Instruction>(BOGEP)));
-  if(isFloat(CI->getType())){
-    FuncInit = M->getOrInsertFunction("fpsan_check_error_f", VoidTy, MPtrTy, CI->getType());
-  }
-  else{
-    FuncInit = M->getOrInsertFunction("fpsan_check_error", VoidTy, MPtrTy, CI->getType());
-  }
-  IRB.CreateCall(FuncInit, {BOGEP, CI});
 }
 
 bool FPSanitizer::handleOperand(Value* OP, Value** ConsInsIndex){
   long Idx = 0;
 
-  Instruction *OpIns = dyn_cast<Instruction>(OP);	
-
+  Instruction *OpIns = dyn_cast<Instruction>(OP);
   if(ConsMap.count(OP) != 0){
     *ConsInsIndex = ConsMap.at(OP);
     return true;
@@ -1489,8 +1391,7 @@ bool FPSanitizer::handleOperand(Value* OP, Value** ConsInsIndex){
   }
   else if(isa<FPTruncInst>(OP) || isa<FPExtInst>(OP)){
     Value *OP1 = OpIns->getOperand(0);
-    return handleOperand(OP1, ConsInsIndex);
-/*
+
     if(isa<FPTruncInst>(OP1) || isa<FPExtInst>(OP1)){
       Value *OP2 = (dyn_cast<Instruction>(OP1))->getOperand(0);
       if(MInsMap.count(dyn_cast<Instruction>(OP2)) != 0){ //TODO need recursive func
@@ -1509,16 +1410,24 @@ bool FPSanitizer::handleOperand(Value* OP, Value** ConsInsIndex){
       *ConsInsIndex = ConsMap.at(OP1);
       return true;
     }
+    else if (isa<Argument>(OP1)) {
+      Idx =  ArgMap.at(dyn_cast<Argument>(OP1));
+      *ConsInsIndex = MArgMap.at(dyn_cast<Argument>(OP1));
+      return true;
+    }
     else{
       return false;
     }
-    */
   }
-  else if(isa<UndefValue>(OP)){
-    *ConsInsIndex = UndefValue::get(MPtrTy);
+  else if(GEPMap.count(dyn_cast<Instruction>(OP)) != 0){
+    *ConsInsIndex = GEPMap.at(dyn_cast<Instruction>(OP));
     return true;
   }
-  else{
+  else if(isa<UndefValue>(OP)){
+    *ConsInsIndex = ConstantPointerNull::get(cast<PointerType>(MPtrTy));
+    return true;
+  }
+  else {
     return false;
   }
 }
@@ -1829,18 +1738,15 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   if(isFloat(BO->getType())){
     ComputeReal = M->getOrInsertFunction("fpsan_mpfr_"+opName+"_f", VoidTy, MPtrTy, MPtrTy, MPtrTy, BOType, BOType,
         BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
-    FuncInit = M->getOrInsertFunction("fpsan_check_error_f", VoidTy, MPtrTy, BOType);
   }
   else if(isDouble(BO->getType())){
     ComputeReal = M->getOrInsertFunction("fpsan_mpfr_"+opName, VoidTy, MPtrTy, MPtrTy, MPtrTy, BOType, BOType,
         BOType, Int64Ty, Int1Ty, Int32Ty, Int32Ty);
-    FuncInit = M->getOrInsertFunction("fpsan_check_error", VoidTy, MPtrTy, BOType);
   }
 
   IRB.CreateCall(ComputeReal, {InsIndex1, InsIndex2, BOGEP, BO->getOperand(0), BO->getOperand(1), BO, 
       instId, debugInfoAvailable, lineNumber, colNumber});
   MInsMap.insert(std::pair<Instruction*, Instruction*>(I, dyn_cast<Instruction>(BOGEP)));
-  IRB.CreateCall(FuncInit, {BOGEP, BO});
 }
 
 void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
@@ -2051,7 +1957,7 @@ bool FPSanitizer::runOnModule(Module &M) {
 
   Real = StructType::create(M.getContext(), "struct.temp_entry");
   RealPtr = Real->getPointerTo();
-  Real->setBody({MPFRTy,
+  Real->setBody({Type::getDoubleTy(M.getContext()),
 	Type::getDoubleTy(M.getContext()),
 	Type::getInt32Ty(M.getContext()),
 	Type::getInt32Ty(M.getContext()),
