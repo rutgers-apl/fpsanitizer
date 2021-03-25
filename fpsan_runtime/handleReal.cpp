@@ -780,9 +780,16 @@ void m_compute(fp_op opCode, double op1d,
 extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
     unsigned int linenumber) {
 
-  double zero = 0;
+  if (!m_start_slice) {
+    return;
+  }
 
-  res->val = zero - op1Idx->val;
+  mpfr_t zero;
+  mpfr_init2(zero, m_precision[buf_id].index);
+  mpfr_set_d(zero, 0, MPFR_RNDN);
+
+  mpfr_sub(res->val, zero, op1Idx->val, MPFR_RNDN);
+  mpfr_clear(zero);
 #ifdef TRACING
   res->op1_lock = op1Idx->op1_lock;
   res->op2_lock = op1Idx->op2_lock;
@@ -796,7 +803,7 @@ extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
   res->error = op1Idx->error;
 #endif
 
-  res->lineno = op1Idx->lineno;
+  res->inst_id = op1Idx->inst_id;
   res->opcode = op1Idx->opcode;
   res->computed = -op1Idx->computed;
 }
