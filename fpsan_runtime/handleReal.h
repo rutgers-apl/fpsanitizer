@@ -174,7 +174,6 @@ size_t m_key_counter = 0;
 #endif
 
 bool m_init_flag = false;
-bool m_start_slice = false;
 
 size_t varCount = 0;
 size_t infCount = 0;

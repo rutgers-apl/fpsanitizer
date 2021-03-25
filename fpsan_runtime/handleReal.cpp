@@ -126,20 +126,10 @@ extern "C" void fpsan_trace(temp_entry *current){
 }
 #endif
 
-extern "C" void fpsan_slice_start() {
-  m_start_slice = true;
-}
-
-extern "C" void fpsan_slice_end() {
-  m_start_slice = false;
-}
 
 // fpsan_check_branch, fpsan_check_conversion, fpsan_check_error are
 // functions that user can set breakpoint on
 extern "C" void fpsan_handle_fptrunc(float val, temp_entry* op1){
-  if (!m_start_slice) {
-    return;
-  }
   op1->computed = val;
 }
 
@@ -148,9 +138,6 @@ extern "C" bool fpsan_check_branch_f(float op1d, temp_entry* op1,
 				     size_t fcmpFlag, bool computedRes,
 				     size_t lineNo){
 
-  if (!m_start_slice) {
-    return false;
-  }
   bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
   if(realRes != computedRes){
     flipsCount++;
@@ -163,9 +150,6 @@ extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
 				 size_t fcmpFlag, bool computedRes,
 				 size_t lineNo){
 
-  if (!m_start_slice) {
-    return false;
-  }
   bool realRes = m_check_branch(&(op1->val), &(op2->val), fcmpFlag);
   if(realRes != computedRes){
     flipsCount++;
@@ -174,9 +158,6 @@ extern "C" bool fpsan_check_branch_d(double op1d, temp_entry* op1,
 }
 extern "C" unsigned int  fpsan_check_conversion(long real, long computed,
 						temp_entry *realRes){
-  if (!m_start_slice) {
-    return 0;
-  }
   if(real != computed){
     return 1;
   }
@@ -208,16 +189,10 @@ unsigned int check_error(temp_entry *realRes, double computedRes){
 }
 
 extern "C" unsigned int fpsan_check_error_f(temp_entry *realRes, float computedRes){
-  if (!m_start_slice) {
-    return 0;
-  }
   return check_error(realRes, computedRes);
 }
 
 extern "C" unsigned int fpsan_check_error(temp_entry *realRes, double computedRes){
-  if (!m_start_slice) {
-    return 0;
-  }
   return check_error(realRes, computedRes);
 }
 
@@ -298,9 +273,6 @@ extern "C" void fpsan_init_mpfr(temp_entry *op) {
 extern "C" void fpsan_init_store_shadow_dconst(smem_entry *op, double d,
 						  unsigned int linenumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   if(!op->is_init){
     op->is_init = true;
     mpfr_init2(op->val, m_precision);
@@ -310,9 +282,6 @@ extern "C" void fpsan_init_store_shadow_dconst(smem_entry *op, double d,
 
 extern "C" void fpsan_init_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
 
-  if (!m_start_slice) {
-    return;
-  }
   if(!op->is_init){
     op->is_init = true;
     mpfr_init2(op->val, m_precision);
@@ -358,9 +327,6 @@ void m_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
 }
 
 extern "C" void fpsan_store_tempmeta_dconst(temp_entry *op, double d, unsigned int linenumber) {
-  if (!m_start_slice) {
-    return;
-  }
 
   mpfr_set_d(op->val, d, MPFR_RNDN);
 
@@ -384,9 +350,6 @@ extern "C" void fpsan_store_tempmeta_dconst(temp_entry *op, double d, unsigned i
 }
 
 extern "C" void fpsan_store_tempmeta_fconst(temp_entry *op, float f, unsigned int linenumber) {
-  if (!m_start_slice) {
-    return;
-  }
 
   mpfr_set_flt(op->val, f, MPFR_RNDN);
 
@@ -460,9 +423,6 @@ smem_entry* m_get_shadowaddress (size_t address){
 extern "C" void fpsan_handle_memset(void *toAddr, int val,
     int size) {
 
-  if (!m_start_slice) {
-    return;
-  }
   size_t toAddrInt = (size_t)(toAddr);
   for (int i = 0; i < size; i++) {
     smem_entry *dst = m_get_shadowaddress(toAddrInt + i);
@@ -488,9 +448,6 @@ extern "C" void fpsan_handle_memset(void *toAddr, int val,
 
 extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
   
-  if (!m_start_slice) {
-    return;
-  }
   size_t toAddrInt = (size_t) (toAddr);
   size_t fromAddrInt = (size_t) (fromAddr);
   for(int i=0; i<size; i++){
@@ -521,10 +478,6 @@ void m_print_real(mpfr_t mpfr_val){
 
 extern "C" void fpsan_store_shadow_fconst(void* toAddr, float op, unsigned int linenumber){
 
-  
-  if (!m_start_slice) {
-    return;
-  }
   size_t toAddrInt = (size_t) toAddr;
   smem_entry* dest = m_get_shadowaddress(toAddrInt);
   fpsan_init_store_shadow_fconst(dest, op, linenumber);
@@ -536,9 +489,6 @@ extern "C" void fpsan_store_shadow_fconst(void* toAddr, float op, unsigned int l
 extern "C" void fpsan_store_shadow_dconst(void* toAddr, double op,
 					  unsigned int linenumber){
 
-  if (!m_start_slice) {
-    return;
-  }
   size_t toAddrInt = (size_t) toAddr;
   smem_entry* dest = m_get_shadowaddress(toAddrInt);
   fpsan_init_store_shadow_dconst(dest, op, linenumber);
@@ -548,9 +498,6 @@ extern "C" void fpsan_store_shadow_dconst(void* toAddr, double op,
 
 extern "C" void fpsan_copy_phi(temp_entry* src, temp_entry* dst){
 
-  if (!m_start_slice) {
-    return;
-  }
   if(src != NULL){
     m_set_mpfr(&(dst->val), &(src->val));
     dst->computed = src->computed;
@@ -576,9 +523,6 @@ extern "C" void fpsan_copy_phi(temp_entry* src, temp_entry* dst){
 
 extern "C" void fpsan_store_shadow(void* toAddr, temp_entry* src){
 
-  if (!m_start_slice) {
-    return;
-  }
   if(src == NULL){
     std::cout<<"Error !!! __set_real trying to read invalid memory\n";
     return;
@@ -606,9 +550,6 @@ extern "C" void fpsan_store_shadow(void* toAddr, temp_entry* src){
 
 extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
 
-  if (!m_start_slice) {
-    return;
-  }
   if(src == NULL) {
     if(debug){
       printf("__load_d:Error !!! __load_d trying to load from invalid stack\n");
@@ -683,9 +624,6 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
 
 extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
 
-  if (!m_start_slice) {
-    return;
-  }
   if(src == NULL){
     if(debug){
       printf("__load_d:Error !!! __load_d trying to load from invalid stack\n");
@@ -743,9 +681,6 @@ void handle_math_d(fp_op opCode, double op1d, temp_entry *op,
 		   double computedResd,  temp_entry *res,
 		   unsigned int linenumber) {
 
-  if (!m_start_slice) {
-    return;
-  }
   switch(opCode){
     case SQRT:
       mpfr_sqrt(res->val, op->val, MPFR_RNDN);
@@ -979,10 +914,6 @@ unsigned int m_check_cc(double op1,
 extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
     unsigned int linenumber) {
 
-  if (!m_start_slice) {
-    return;
-  }
-
   mpfr_t zero;
   mpfr_init2(zero, m_precision[buf_id].index);
   mpfr_set_d(zero, 0, MPFR_RNDN);
@@ -1018,9 +949,6 @@ extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
 				   unsigned int linenumber,
 				   unsigned int colnumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FADD, op1d, op1Idx, op2d, op2Idx,
       computedResD, res, linenumber);
 
@@ -1046,9 +974,6 @@ extern "C" void fpsan_mpfr_fsub_f( temp_entry* op1Idx,
 				   unsigned int linenumber,
 				   unsigned int colnumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FSUB, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
 
@@ -1074,9 +999,6 @@ extern "C" void fpsan_mpfr_fmul_f( temp_entry* op1Idx,
 				   unsigned int linenumber,
 				   unsigned int colnumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FMUL, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
 }
@@ -1092,9 +1014,6 @@ extern "C" void fpsan_mpfr_fdiv_f( temp_entry* op1Idx,
 				   unsigned int linenumber,
 				   unsigned int colnumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FDIV, op1d, op1Idx, op2d, op2Idx, 
 	    computedResD, res, linenumber);
   if(isinf(computedResD))
@@ -1112,9 +1031,6 @@ extern "C" void fpsan_mpfr_fadd( temp_entry* op1Idx,
 				 unsigned int linenumber,
 				 unsigned int colnumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FADD, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
 
@@ -1140,9 +1056,6 @@ extern "C" void fpsan_mpfr_fsub( temp_entry* op1Idx,
 				 unsigned int linenumber,
 				 unsigned int colnumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FSUB, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
 
@@ -1168,9 +1081,6 @@ extern "C" void fpsan_mpfr_fmul( temp_entry* op1Idx,
 				 unsigned int linenumber,
 				 unsigned int colnumber) {
   
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FMUL, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
 }
@@ -1186,9 +1096,6 @@ extern "C" void fpsan_mpfr_fdiv( temp_entry* op1Idx,
 				 unsigned int linenumber,
 				 unsigned int colnumber) {
  
-  if (!m_start_slice) {
-    return;
-  }
   m_compute(FDIV, op1d, op1Idx, op2d, op2Idx, 
 	    computedResD, res, linenumber);
   if(isinf(computedResD))
@@ -1508,9 +1415,6 @@ extern "C" void fpsan_get_return(temp_entry* dest) {
 
 extern "C" temp_entry* fpsan_get_arg(size_t argIdx, double op) {
 
-  if (!m_start_slice) {
-    return NULL;
-  }
   temp_entry *dst = &(m_shadow_stack[m_stack_top-argIdx]);
 
 #ifdef TRACING  
@@ -1531,31 +1435,12 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
   temp_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
   assert(argIdx < MAX_STACK_SIZE && "Arg index is more than MAX_STACK_SIZE");
 
-  if (!m_start_slice) {
-    mpfr_set_flt(dest->val, op, MPFR_RNDN);
-
-#ifdef TRACING  
-    dest->lock = m_key_stack_top;
-    dest->key = m_lock_key_map[m_key_stack_top];
-    dest->op1_lock = 0;
-    dest->op1_key = 0;
-    dest->op2_lock = 0;
-    dest->op2_key = 0;
-    dest->lhs = NULL;
-    dest->rhs = NULL;
-    dest->error = 0;
-    dest->timestamp = m_timestamp++;
-#endif
-
-    dest->lineno = 0;
-    dest->opcode = CONSTANT;
-    dest->computed = op;
-  }
-  else if(src != NULL){
+  /* Santosh: Check if we will ever have src == NULL with arguments */
+  if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
-    dest->lineno = src->lineno;
     dest->opcode = src->opcode;
+    dest->lineno = src->lineno;
     dest->is_init = true;
 
 #ifdef TRACING    
@@ -1583,27 +1468,8 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
   temp_entry *dest = &(m_shadow_stack[argIdx+m_stack_top]);
   assert(argIdx < MAX_STACK_SIZE && "Arg index is more than MAX_STACK_SIZE");
 
-  if (!m_start_slice) {
-    mpfr_set_d(dest->val, op, MPFR_RNDN);
-
-#ifdef TRACING  
-    dest->lock = m_key_stack_top;
-    dest->key = m_lock_key_map[m_key_stack_top];
-    dest->op1_lock = 0;
-    dest->op1_key = 0;
-    dest->op2_lock = 0;
-    dest->op2_key = 0;
-    dest->lhs = NULL;
-    dest->rhs = NULL;
-    dest->error = 0;
-    dest->timestamp = m_timestamp++;
-#endif
-
-    dest->lineno = 0;
-    dest->opcode = CONSTANT;
-    dest->computed = op;
-  }
-  else if(src != NULL){
+  /* Santosh: Check if we will ever have src == NULL with arguments */
+  if(src != NULL){
     m_set_mpfr(&(dest->val), &(src->val));
     dest->computed = src->computed;
     dest->lineno = src->lineno;
@@ -1622,13 +1488,10 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
     dest->op2_key = src->op2_key;
     dest->rhs = src->rhs;
     dest->timestamp = src->timestamp;
-    
-
 #endif
-    
   }
   else{
-    fpsan_store_tempmeta_dconst(dest, op, 0);
+    fpsan_store_tempmeta_fconst(dest, op, 0);
     dest->is_init = true;
   }
 }
@@ -1698,9 +1561,6 @@ int m_update_error(temp_entry *real, double computedVal){
 
 
 extern "C" void fpsan_get_error(void *Addr, double computed){
-  if (!m_start_slice) {
-    return;
-  }
   size_t AddrInt = (size_t) Addr;
   smem_entry* dest = m_get_shadowaddress(AddrInt);
 
@@ -1917,9 +1777,6 @@ extern "C" void fpsan_mpfr_GSL_MIN_DBL2(temp_entry* op1Idx, double op1d,
 					unsigned int linenumber, 
 					unsigned int colnumber){
 
-  if (!m_start_slice) {
-    return;
-  }
   mpfr_min(res->val, op1Idx->val, op2Idx->val, MPFR_RNDN);
   res->lineno = linenumber;
   res->opcode = MIN;
@@ -1950,9 +1807,6 @@ extern "C" void fpsan_mpfr_GSL_MAX_DBL2(temp_entry* op1Idx, double op1d,
 					unsigned int linenumber, 
 					unsigned int colnumber){
   
-  if (!m_start_slice) {
-    return;
-  }
 
   mpfr_max(res->val, op1Idx->val, op2Idx->val, MPFR_RNDN);
   res->opcode = MAX;
@@ -1984,9 +1838,6 @@ extern "C" void fpsan_mpfr_ldexp2(temp_entry* op1Idx, double op1d,
 				  unsigned int linenumber, 
 				  unsigned int colnumber){
   
-  if (!m_start_slice) {
-    return;
-  }
   //op1*2^(op2)
   mpfr_t exp;
   mpfr_init2(exp, m_precision);
@@ -2026,9 +1877,6 @@ extern "C" void fpsan_mpfr_fmod2(temp_entry* op1Idx, double op1d,
 				 unsigned int linenumber, 
 				 unsigned int colnumber){
   
-  if (!m_start_slice) {
-    return;
-  }
   mpfr_fmod(res->val, op1Idx->val, op2Idx->val, MPFR_RNDN);
   res->opcode = FMOD;
   res->computed = computedRes;
@@ -2058,10 +1906,6 @@ extern "C" void fpsan_mpfr_atan22(temp_entry* op1, double op1d,
 				  unsigned int linenumber, 
 				  unsigned int colnumber){
   
-  
-  if (!m_start_slice) {
-    return;
-  }
   mpfr_atan2(res->val, op1->val, op2->val, MPFR_RNDN);
   res->opcode = ATAN2;
   res->computed = computedRes;
@@ -2092,9 +1936,6 @@ extern "C" void fpsan_mpfr_hypot2(temp_entry* op1, double op1d,
 				  unsigned int linenumber, 
 				  unsigned int colnumber){
   
-  if (!m_start_slice) {
-    return;
-  }
   mpfr_hypot(res->val, op1->val, op2->val, MPFR_RNDN);
   res->opcode = HYPOT;
   res->computed = computedRes;
@@ -2125,9 +1966,6 @@ extern "C" void fpsan_mpfr_pow2(temp_entry* op1, double op1d,
 				unsigned int linenumber, 
 				unsigned int colnumber){
   
-  if (!m_start_slice) {
-    return;
-  }
   mpfr_pow(res->val, op1->val, op2->val, MPFR_RNDN);
   res->opcode = POW;
   res->computed = computedRes;

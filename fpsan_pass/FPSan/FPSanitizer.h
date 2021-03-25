@@ -66,8 +66,6 @@ namespace {
     void handleFuncMainInit(Function *F);
     void handleInit(Module *M);
     void handleIns(Instruction *I, BasicBlock *BB, Function *F);
-    void handleStartSlice(CallInst *CI, Function *F);
-    void handleEndSlice(CallInst *CI, Function *F);
     long getTotalFPInst(Function *F);
     ConstantInt* GetInstId(Function *F, Instruction* I);
     StructType *MPFRTy;

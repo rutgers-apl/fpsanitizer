@@ -5,14 +5,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 
-static cl::opt<int> Precision("fpsan-precision",
-    cl::desc("default mpfr precision is initialized to 512"),
-    cl::Hidden, cl::init(512));
-
-static cl::opt<int> ENV("fpsan-with-type",
-    cl::desc("shadow execution with mpfr"),
-    cl::Hidden, cl::init(2));
-
 void FPSanitizer::addFunctionsToList(std::string FN) {
   std::ofstream myfile;
   myfile.open("functions.txt", std::ios::out|std::ios::app);
@@ -1125,7 +1117,6 @@ void FPSanitizer::handleFuncMainInit(Function *F){
   Type* VoidTy = Type::getVoidTy(M->getContext());
   Type* Int64Ty = Type::getInt64Ty(M->getContext());
 
-  Constant* Prec = ConstantInt::get(Type::getInt64Ty(M->getContext()), Precision);
   Finish = M->getOrInsertFunction("fpsan_init", VoidTy);
   long TotIns = 0;
 
@@ -1190,42 +1181,6 @@ FPSanitizer::handleCallInst (CallInst *CI,
       IRB.CreateCall(AddFunArg, {ArgNo, OpIdx, Op[i]});
     }
   }
-}
-
-void FPSanitizer::handleStartSlice(CallInst *CI, Function *F) {
-  Function::iterator Fit = F->begin();
-  BasicBlock &BB = *Fit;
-  BasicBlock::iterator BBit = BB.begin();
-  Instruction *First = &*BBit;
-
-  Module *M = F->getParent();
-
-  Type *VoidTy = Type::getVoidTy(M->getContext());
-  IntegerType *Int32Ty = Type::getInt32Ty(M->getContext());
-  Type *PtrVoidTy = PointerType::getUnqual(Type::getInt8Ty(M->getContext()));
-
-  IRBuilder<> IRB(First);
-
-  Finish = M->getOrInsertFunction("fpsan_slice_start", VoidTy);
-  IRB.CreateCall(Finish, {});
-}
-
-void FPSanitizer::handleEndSlice(CallInst *CI, Function *F) {
-  Function::iterator Fit = F->begin();
-  BasicBlock &BB = *Fit;
-  BasicBlock::iterator BBit = BB.begin();
-  Instruction *First = &*BBit;
-
-  Module *M = F->getParent();
-
-  Type *VoidTy = Type::getVoidTy(M->getContext());
-  IntegerType *Int32Ty = Type::getInt32Ty(M->getContext());
-  Type *PtrVoidTy = PointerType::getUnqual(Type::getInt8Ty(M->getContext()));
-
-  IRBuilder<> IRB(CI);
-
-  Finish = M->getOrInsertFunction("fpsan_slice_end", VoidTy);
-  IRB.CreateCall(Finish, {});
 }
 
 void FPSanitizer::handleFuncInit(Function *F){
@@ -2155,23 +2110,6 @@ bool FPSanitizer::runOnModule(Module &M) {
     GEPMap.clear(); 
     ConsMap.clear(); 
   } 
-  for (auto &F : M) {
-    if (F.isDeclaration()) continue;
-    for (auto &BB : F) {
-      for (auto &I : BB) {
-        if (CallInst *CI = dyn_cast<CallInst>(&I)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if (Callee->getName().startswith("end_slice")) {
-              handleEndSlice(CI, &F);
-            } else if (Callee->getName().startswith("start_slice")) {
-              handleStartSlice(CI, &F);
-            }
-          }
-        }     
-      }
-    }
-  }
   for (auto &F : M) {
     if (F.isDeclaration()) continue;
     if(F.getName() == "main"){
