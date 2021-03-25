@@ -1,11 +1,5 @@
 #include "handleReal.h"
 
-/*
-We don't want to call mpfr_init on every add or sub.That's why we keep 
-it as global variables and do init once and just update on every add or sub 
-*/
-mpfr_t op1_mpfr, op2_mpfr, res_mpfr;
-mpfr_t computed, temp_diff;
 // fpsan_trace: a function that user can set a breakpoint on to
 // generate DAGs
 
@@ -126,7 +120,6 @@ extern "C" void fpsan_trace(temp_entry *current){
 }
 #endif
 
-
 // fpsan_check_branch, fpsan_check_conversion, fpsan_check_error are
 // functions that user can set breakpoint on
 extern "C" void fpsan_handle_fptrunc(float val, temp_entry* op1){
@@ -239,29 +232,12 @@ extern "C" void fpsan_init() {
     m_lock_key_map[m_key_stack_top] = m_key_counter;
 #endif    
 
-    for(int i =0; i<MAX_STACK_SIZE; i++){
-      mpfr_init2(m_shadow_stack[i].val, m_precision);
-    }
-
     m_stack_top = 0;
-    m_prec_bits_f = 23;
-    m_prec_bits_d = 52;
-    mpfr_init2(op1_mpfr, m_precision);
-    mpfr_init2(op2_mpfr, m_precision);
-    mpfr_init2(res_mpfr, m_precision);
-    mpfr_init2(temp_diff, m_precision);
-    mpfr_init2(computed, m_precision);
   }
-}
-
-void m_set_mpfr(mpfr_t *val1, mpfr_t *val2) {
-  mpfr_set(*val1, *val2, MPFR_RNDN);
 }
 
 //primarily used in the LLVM IR for initializing stack metadata
 extern "C" void fpsan_init_mpfr(temp_entry *op) {
-
-  mpfr_init2(op->val, m_precision);
 
 #ifdef TRACING  
   op->lock = m_key_stack_top;
@@ -275,7 +251,6 @@ extern "C" void fpsan_init_store_shadow_dconst(smem_entry *op, double d,
   
   if(!op->is_init){
     op->is_init = true;
-    mpfr_init2(op->val, m_precision);
   }
   m_store_shadow_dconst(op, d, linenumber);
 }
@@ -284,7 +259,6 @@ extern "C" void fpsan_init_store_shadow_fconst(smem_entry *op, float f, unsigned
 
   if(!op->is_init){
     op->is_init = true;
-    mpfr_init2(op->val, m_precision);
   }
   m_store_shadow_fconst(op, f, linenumber);
 }
@@ -296,7 +270,7 @@ int m_isnan(mpfr_t real){
 
 void m_store_shadow_dconst(smem_entry *op, double d, unsigned int linenumber) {
 
-  mpfr_set_d(op->val, d, MPFR_RNDN);
+  op->val = d;
 
 #ifdef TRACING  
   op->lock = m_key_stack_top;
@@ -313,7 +287,7 @@ void m_store_shadow_dconst(smem_entry *op, double d, unsigned int linenumber) {
 
 void m_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
 
-  mpfr_set_flt(op->val, f, MPFR_RNDN);
+  op->val = f;
 #ifdef TRACING  
   op->lock = m_key_stack_top;
   op->key = m_lock_key_map[m_key_stack_top];
@@ -380,10 +354,6 @@ float m_get_float(mpfr_t mpfr_val) { return mpfr_get_flt(mpfr_val, MPFR_RNDN); }
 
 double m_get_double(mpfr_t mpfr_val) { return mpfr_get_d(mpfr_val, MPFR_RNDN); }
 
-long double m_get_longdouble(temp_entry *real) {
-  return mpfr_get_ld(real->val, MPFR_RNDN);
-}
-
 #ifdef METADATA_AS_TRIE
 
 smem_entry* m_get_shadowaddress(size_t address){
@@ -400,7 +370,6 @@ smem_entry* m_get_shadowaddress(size_t address){
   smem_entry* realAddr = primary_ptr + offset;
   if(!realAddr->is_init){
     realAddr->is_init = true;
-    mpfr_init2(realAddr->val, m_precision);
   }
   return realAddr;
 }
@@ -413,7 +382,6 @@ smem_entry* m_get_shadowaddress (size_t address){
   smem_entry* realAddr = m_shadow_memory + index;
   if(!realAddr->is_init){
     realAddr->is_init = true;
-    mpfr_init2(realAddr->val, m_precision);
   }
   return realAddr;
 }
@@ -428,9 +396,8 @@ extern "C" void fpsan_handle_memset(void *toAddr, int val,
     smem_entry *dst = m_get_shadowaddress(toAddrInt + i);
     if (!dst->is_init) {
       dst->is_init = true;
-      mpfr_init2(dst->val, m_precision);
     }
-    mpfr_set_d(dst->val, val, MPFR_RNDN);
+    dst->val = val;
 
 #ifdef TRACING
     dst->error = 0;
@@ -453,7 +420,7 @@ extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
   for(int i=0; i<size; i++){
     smem_entry* dst = m_get_shadowaddress(toAddrInt+i);
     smem_entry* src = m_get_shadowaddress(fromAddrInt+i);
-    m_set_mpfr(&(dst->val), &(src->val));
+    dst->val = src->val;
 
 #ifdef TRACING  
     dst->error = src->error;
@@ -468,9 +435,8 @@ extern "C" void fpsan_handle_memcpy(void* toAddr, void* fromAddr, int size){
     dst->opcode = src->opcode;
   }
 }
-void m_print_real(mpfr_t mpfr_val){
-
-  mpfr_out_str (stdout, 10, 15, mpfr_val, MPFR_RNDN);
+void m_print_real(double val){
+  printf("%e", val);
 }
 
 
@@ -499,7 +465,7 @@ extern "C" void fpsan_store_shadow_dconst(void* toAddr, double op,
 extern "C" void fpsan_copy_phi(temp_entry* src, temp_entry* dst){
 
   if(src != NULL){
-    m_set_mpfr(&(dst->val), &(src->val));
+    dst->val = src->val;
     dst->computed = src->computed;
     dst->opcode = src->opcode;
     dst->lineno = src->lineno;
@@ -532,7 +498,7 @@ extern "C" void fpsan_store_shadow(void* toAddr, temp_entry* src){
   smem_entry* dest = m_get_shadowaddress(toAddrInt);
   
   /*copy val*/
-  m_set_mpfr(&(dest->val), &(src->val));
+  dest->val = src->val;
   /*copy everything else except res key and opcode*/
 #ifdef TRACING  
   dest->error = src->error;
@@ -570,7 +536,7 @@ extern "C" void fpsan_load_shadow_fconst(temp_entry *src, void *Addr, float d){
 #endif
   
   /* copy the metadata from shadow memory to temp metadata*/
-  m_set_mpfr(&(src->val), &(dest->val));
+  src->val = dest->val;
 #ifdef TRACING  
   src->lock = m_key_stack_top; 
   src->key = m_lock_key_map[m_key_stack_top];
@@ -643,7 +609,7 @@ extern "C" void fpsan_load_shadow_dconst(temp_entry *src, void *Addr, double d){
   }
 #endif
   
-  m_set_mpfr(&(src->val), &(dest->val));
+  src->val = dest->val;
   src->lineno = dest->lineno;
   src->computed = dest->computed;
   src->opcode = dest->opcode;
@@ -683,52 +649,52 @@ void handle_math_d(fp_op opCode, double op1d, temp_entry *op,
 
   switch(opCode){
     case SQRT:
-      mpfr_sqrt(res->val, op->val, MPFR_RNDN);
+      res->val = sqrt(op->val);
       break;
     case FLOOR:
-      mpfr_floor(res->val, op->val);
+      res->val = floor(op->val);
       break;
     case CEIL:
-      mpfr_ceil(res->val, op->val);
+      res->val = ceil(op->val);
       break;
     case TAN:
-      mpfr_tan(res->val, op->val, MPFR_RNDN);
+      res->val = tan(op->val);
       break;
     case TANH:
-      mpfr_tanh(res->val, op->val, MPFR_RNDN);
+      res->val = tanh(op->val);
       break;
     case SIN:
-      mpfr_sin(res->val, op->val, MPFR_RNDN);
+      res->val = sin(op->val);
       break;
     case SINH:
-      mpfr_sinh(res->val, op->val, MPFR_RNDN);
+      res->val = sinh(op->val);
       break;
     case COS:
-      mpfr_cos(res->val, op->val, MPFR_RNDN);
+      res->val = cos(op->val);
       break;
     case COSH:
-      mpfr_cosh(res->val, op->val, MPFR_RNDN);
+      res->val = cosh(op->val);
       break;
     case ACOS:
-      mpfr_acos(res->val, op->val, MPFR_RNDN);
+      res->val = acos(op->val);
       break;
     case ATAN:
-      mpfr_atan(res->val, op->val, MPFR_RNDN);
+      res->val = atan(op->val);
       break;
     case ABS:
-      mpfr_abs(res->val, op->val, MPFR_RNDN);
+      res->val = abs(op->val);
       break;
     case LOG:
-      mpfr_log(res->val, op->val, MPFR_RNDN);
+      res->val = log(op->val);
       break;
     case LOG10:
-      mpfr_log10(res->val, op->val, MPFR_RNDN);
+      res->val = log10(op->val);
       break;
     case ASIN: 
-      mpfr_asin(res->val, op->val, MPFR_RNDN);
+      res->val = asin(op->val);
       break;
     case EXP: 
-      mpfr_exp(res->val, op->val, MPFR_RNDN);
+      res->val = exp(op->val);
       break;
     default:
       std::cout<<"Error!!! Math function not supported\n\n";
@@ -766,19 +732,19 @@ void m_compute(fp_op opCode, double op1d,
   
   switch(opCode) {                                                                                            
     case FADD: 
-      mpfr_add (res->val, op1->val, op2->val, MPFR_RNDN);      
+      res->val = op1->val + op2->val;
       break;
       
     case FSUB: 
-      mpfr_sub (res->val, op1->val, op2->val, MPFR_RNDN);
+      res->val = op1->val - op2->val;
       break;
 
     case FMUL: 
-      mpfr_mul (res->val, op1->val, op2->val, MPFR_RNDN);
+      res->val = op1->val * op2->val;
       break;
       
     case FDIV: 
-      mpfr_div (res->val, op1->val, op2->val, MPFR_RNDN);
+      res->val = op1->val / op2->val;
       break;
       
     default:
@@ -812,104 +778,6 @@ void m_compute(fp_op opCode, double op1d,
   res->opcode = opCode;
   res->computed = computedResd;
 }
-
-unsigned int m_get_exact_bits(
-    double opD, int precBits,
-    temp_entry *shadow){
-
-  mpfr_set_d(computed, opD, MPFR_RNDN);
-
-  mpfr_sub(temp_diff, shadow->val, computed, MPFR_RNDN);
-
-  mpfr_exp_t exp_real = mpfr_get_exp(shadow->val);
-  mpfr_exp_t exp_computed = mpfr_get_exp(computed);
-  mpfr_exp_t exp_diff = mpfr_get_exp(temp_diff);
-
-  if(mpfr_cmp(computed, shadow->val) == 0){
-    return precBits;
-  }
-  else if(exp_real != exp_computed){
-    return 0;
-  }
-  else{
-    if(mpfr_cmp_ui(temp_diff, 0) != 0) {
-      if(precBits < abs(exp_real -  exp_diff)){
-        return precBits;
-      }
-      else{
-        return abs(exp_real -  exp_diff);
-      }
-    }
-    else{
-      return 0;
-    }
-  }
-}
-
-mpfr_exp_t m_get_cancelled_bits(double op1, double op2, double res){
-  mpfr_set_d(op1_mpfr, op1, MPFR_RNDN);
-
-  mpfr_set_d(op2_mpfr, op2, MPFR_RNDN);
-
-  mpfr_set_d(res_mpfr, res, MPFR_RNDN);
-
-  mpfr_exp_t exp_op1 = mpfr_get_exp(op1_mpfr);
-  mpfr_exp_t exp_op2 = mpfr_get_exp(op2_mpfr);
-  mpfr_exp_t exp_res = mpfr_get_exp(res_mpfr);
-
-  mpfr_exp_t max_exp;
-  if( mpfr_regular_p(op1_mpfr) == 0 ||
-      mpfr_regular_p(op2_mpfr) == 0 ||
-      mpfr_regular_p(res_mpfr) == 0)
-    return 0;
-
-  if(exp_op1 > exp_op2)
-    max_exp = exp_op1;
-  else
-    max_exp = exp_op2;
-
-  if(max_exp > exp_res)
-    return abs(max_exp - exp_res);
-  else
-    return 0;
-}
-
-unsigned int m_get_cbad(mpfr_exp_t cbits,
-    unsigned int ebitsOp1,
-    unsigned int ebitsOp2){
-  unsigned int min_ebits;
-  if (ebitsOp1 > ebitsOp2)
-    min_ebits = ebitsOp2;
-  else
-    min_ebits = ebitsOp1;
-  int badness = 1 + cbits - min_ebits;
-  if(badness > 0)
-    return badness;
-  else
-    return 0;
-}
-
-#ifdef TRACING
-unsigned int m_check_cc(double op1, 
-                        double op2, 
-                        double res,
-                        int precBits,
-                        temp_entry *shadowOp1,
-                        temp_entry *shadowOp2,
-                        temp_entry *shadowVal){
-
-  /* If op1 or op2 is NaR, then it is not catastrophic cancellation*/
-  if (isnan(op1) || isnan(op2)) return 0;
-  /* If result is 0 and it has error, then it is catastrophic cancellation*/
-  if ((res == 0) && shadowVal->error != 0) return 1;
-
-  unsigned int ebitsOp1 = m_get_exact_bits(op1, precBits, shadowOp1);
-  unsigned int ebitsOp2 = m_get_exact_bits(op2, precBits, shadowOp2);
-  mpfr_exp_t cbits = m_get_cancelled_bits(op1, op2, res);
-  unsigned int cbad = m_get_cbad(cbits, ebitsOp1, ebitsOp2);
-  return cbad;
-}
-#endif
 
 extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
     unsigned int linenumber) {
@@ -951,16 +819,6 @@ extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
   
   m_compute(FADD, op1d, op1Idx, op2d, op2Idx,
       computedResD, res, linenumber);
-
-#ifdef TRACING
-  unsigned int cbad = 0;
-  if(((op1d < 0) && (op2d > 0)) ||
-      ((op1d > 0) && (op2d < 0))){
-    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_f, op1Idx, op2Idx, res);
-    if(cbad > 0)
-      ccCount++;
-  }
-#endif
 }
 
 extern "C" void fpsan_mpfr_fsub_f( temp_entry* op1Idx,
@@ -976,16 +834,6 @@ extern "C" void fpsan_mpfr_fsub_f( temp_entry* op1Idx,
   
   m_compute(FSUB, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
-
-#ifdef TRACING
-  unsigned int cbad = 0;
-  if(((op1d < 0) && (op2d < 0)) ||
-      ((op1d > 0) && (op2d > 0))){
-    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_f, op1Idx, op2Idx, res);
-    if(cbad > 0)
-      ccCount++;
-  }
-#endif
 }
 
 extern "C" void fpsan_mpfr_fmul_f( temp_entry* op1Idx,
@@ -1033,16 +881,6 @@ extern "C" void fpsan_mpfr_fadd( temp_entry* op1Idx,
   
   m_compute(FADD, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
-
-#ifdef TRACING
-  unsigned int cbad = 0;
-  if(((op1d < 0) && (op2d > 0)) ||
-      ((op1d > 0) && (op2d < 0))){
-    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_d, op1Idx, op2Idx, res);
-    if(cbad > 0)
-      ccCount++;
-  }
-#endif
 }
 
 extern "C" void fpsan_mpfr_fsub( temp_entry* op1Idx,
@@ -1058,16 +896,6 @@ extern "C" void fpsan_mpfr_fsub( temp_entry* op1Idx,
   
   m_compute(FSUB, op1d, op1Idx, op2d, op2Idx,
 	    computedResD, res, linenumber);
-
-#ifdef TRACING
-  unsigned int cbad = 0;
-  if(((op1d < 0) && (op2d < 0)) ||
-      ((op1d > 0) && (op2d > 0))){
-    cbad = m_check_cc(op1d, op2d, computedResD, m_prec_bits_d, op1Idx, op2Idx, res);
-    if(cbad > 0)
-      ccCount++;
-  }
-#endif
 }
 
 extern "C" void fpsan_mpfr_fmul( temp_entry* op1Idx,
@@ -1102,88 +930,86 @@ extern "C" void fpsan_mpfr_fdiv( temp_entry* op1Idx,
     infCount++;
 }
 
-bool m_check_branch(mpfr_t* op1, mpfr_t* op2,
-		    size_t fcmpFlag){
+bool m_check_branch(double op1, double op2,
+    size_t fcmpFlag){
   bool realRes = false;
-  int ret = mpfr_cmp(*op1, *op2);
-
-  switch(fcmpFlag){
+  switch (fcmpFlag) {
     case 0:
       realRes = false;
       break;
     case 1: /*oeq*/
-      if(!m_isnan(*op1) && !m_isnan(*op2)){
-        if(ret == 0)
+      if (!isnan(op1) && !isnan(op2)) {
+        if (op1 == op2)
           realRes = true;
       }
       break;
     case 2: /*ogt*/
-      if(!m_isnan(*op1) && !m_isnan(*op2)){
-        if(ret > 0){
+      if (!isnan(op1) && !isnan(op2)) {
+        if (op1 > op2) {
           realRes = true;
         }
       }
       break;
-    case 3:
-      if(!m_isnan(*op1) && !m_isnan(*op2)){
-        if(ret > 0 || ret == 0){
+    case 3: /*oge*/
+      if (!isnan(op1) && !isnan(op2)) {
+        if (op1 >= op2) {
           realRes = true;
         }
       }
       break;
     case 4: /*olt*/
-      if(!m_isnan(*op1) && !m_isnan(*op2)){
-        if(ret < 0){
+      if (!isnan(op1) && !isnan(op2)) {
+        if (op1 < op2) {
           realRes = true;
         }
       }
       break;
-    case 5:
-      if(!m_isnan(*op1) && !m_isnan(*op2)){
-        if(ret < 0 || ret == 0){
+    case 5: /*ole*/
+      if (!isnan(op1) && !isnan(op2)) {
+        if (op1 <= op2) {
           realRes = true;
         }
       }
       break;
-    case 6:
-      if(!m_isnan(*op1) && !m_isnan(*op2)){
-        if(ret != 0){
+    case 6: /*one*/
+      if (!isnan(op1) && !isnan(op2)) {
+        if (op1 != op2) {
           realRes = true;
         }
       }
       break;
-    case 7:
-      if(!m_isnan(*op1) && !m_isnan(*op2)){
+    case 7: /*ord*/
+      if (!isnan(op1) && !isnan(op2)) {
         realRes = true;
       }
       break;
     case 8:
-      if(m_isnan(*op1) && m_isnan(*op2)){
+      if (isnan(op1) && isnan(op2)) {
         realRes = true;
       }
       break;
     case 9:
-      if(m_isnan(*op1) || m_isnan(*op2) || ret == 0)
+      if (isnan(op1) || isnan(op2) || op1 == op2)
         realRes = true;
       break;
     case 10:
-      if(m_isnan(*op1) || m_isnan(*op2) || ret > 0)
+      if (isnan(op1) || isnan(op2) || op1 > op2)
         realRes = true;
       break;
     case 11:
-      if(m_isnan(*op1) || m_isnan(*op2) || ret >= 0)
+      if (isnan(op1) || isnan(op2) || op1 >= op2)
         realRes = true;
       break;
-    case 12: 
-      if(m_isnan(*op1) || m_isnan(*op2) || ret < 0)
+    case 12:
+      if (isnan(op1) || isnan(op2) || op1 < op2)
         realRes = true;
       break;
     case 13:
-      if(m_isnan(*op1) || m_isnan(*op2) || ret <= 0)
+      if (isnan(op1) || isnan(op2) || op1 <= op2)
         realRes = true;
       break;
     case 14:
-      if(m_isnan(*op1) || m_isnan(*op2) || ret != 0){
+      if (isnan(op1) || isnan(op2) || op1 != op2) {
         realRes = true;
       }
       break;
@@ -1345,7 +1171,7 @@ extern "C" void fpsan_set_return(temp_entry* src, size_t totalArgs, double op) {
 
   temp_entry *dest = &(m_shadow_stack[m_stack_top - totalArgs]); 
   if(src != NULL){
-    m_set_mpfr(&(dest->val), &(src->val));
+    dest->val = src->val;
     dest->computed = src->computed;
     dest->opcode = src->opcode;
     dest->lineno = src->lineno;
@@ -1389,7 +1215,7 @@ extern "C" void fpsan_set_return(temp_entry* src, size_t totalArgs, double op) {
 extern "C" void fpsan_get_return(temp_entry* dest) {
 
   temp_entry *src = &(m_shadow_stack[m_stack_top]); //save return m_stack_top - totalArgs 
-  m_set_mpfr(&(dest->val), &(src->val));
+  dest->val = src->val;
   dest->computed = src->computed;
   dest->lineno = src->lineno;
   dest->opcode = src->opcode;
@@ -1455,6 +1281,7 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
     dest->op2_key = src->op2_key;
     dest->rhs = src->rhs;
     dest->timestamp = src->timestamp;
+
 #endif
   }
   else{
@@ -1533,8 +1360,7 @@ extern "C" void fpsan_finish() {
 }
 
 int m_update_error(temp_entry *real, double computedVal){
-  double shadowRounded = m_get_double(real->val);
-  unsigned long ulpsError = m_ulpd(shadowRounded, computedVal);
+  unsigned long ulpsError = m_ulpd(real->val, computedVal);
 
   double bitsError = log2(ulpsError + 1);
 
@@ -1564,8 +1390,7 @@ extern "C" void fpsan_get_error(void *Addr, double computed){
   size_t AddrInt = (size_t) Addr;
   smem_entry* dest = m_get_shadowaddress(AddrInt);
 
-  double shadowRounded = m_get_double(dest->val);
-  unsigned long ulpsError = m_ulpd(shadowRounded,  computed);
+  unsigned long ulpsError = m_ulpd(dest->val,  computed);
 
   printf("getError real:");
   m_print_real(dest->val);
@@ -1573,7 +1398,7 @@ extern "C" void fpsan_get_error(void *Addr, double computed){
   printf("getError computed: %e", computed);
   printf("\n");
   double bitsError = log2(ulpsError + 1);
-  fprintf(m_errfile, "computed:%e real:%e Error: %lu ulps (%lf bits)\n", computed, shadowRounded, ulpsError, bitsError);
+  fprintf(m_errfile, "computed:%e real:%e Error: %lu ulps (%lf bits)\n", computed, dest->val, ulpsError, bitsError);
 }
 
 
@@ -1814,7 +1639,6 @@ extern "C" void fpsan_mpfr_GSL_MAX_DBL2(temp_entry* op1Idx, double op1d,
   res->lineno = linenumber;
 
 #ifdef TRACING
-  
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1Idx->lock;
   res->op1_key = m_lock_key_map[op1Idx->lock];
@@ -1839,21 +1663,15 @@ extern "C" void fpsan_mpfr_ldexp2(temp_entry* op1Idx, double op1d,
 				  unsigned int colnumber){
   
   //op1*2^(op2)
-  mpfr_t exp;
-  mpfr_init2(exp, m_precision);
-  mpfr_set_si(exp, op2d, MPFR_RNDN);
-  mpfr_exp2(res->val, exp, MPFR_RNDN);
-  mpfr_mul(res->val, op1Idx->val, res->val,  MPFR_RNDN);
+  double exp = op2d;
+  res->val = exp2(exp);
+  res->val = op1Idx->val * res->val;
   
-  mpfr_clear(exp);
-
   res->lineno = linenumber;
   res->opcode = LDEXP;
   res->computed = computedRes;
 
-
 #ifdef TRACING  
-  
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1Idx->lock;
   res->op1_key = m_lock_key_map[op1Idx->lock];
@@ -1866,7 +1684,6 @@ extern "C" void fpsan_mpfr_ldexp2(temp_entry* op1Idx, double op1d,
   res->timestamp = m_timestamp++;
   res->error = bitsError;
 #endif
-  
 }
 
 extern "C" void fpsan_mpfr_fmod2(temp_entry* op1Idx, double op1d, 
