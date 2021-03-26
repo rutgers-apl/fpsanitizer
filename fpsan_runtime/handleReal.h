@@ -132,7 +132,7 @@ smem_entry * m_shadow_memory;
 #define debug 0
 #define debugtrace 0
 #define debugerror 0
-#define ERRORTHRESHOLD 45
+#define ERRORTHRESHOLD 50
 
 
 # if !defined(PREC_128) && !defined(PREC_256) && !defined(PREC_512) && !defined(PREC_1024) 
@@ -174,7 +174,6 @@ size_t m_key_counter = 0;
 #endif
 
 bool m_init_flag = false;
-
 size_t varCount = 0;
 size_t infCount = 0;
 size_t nanCount = 0;

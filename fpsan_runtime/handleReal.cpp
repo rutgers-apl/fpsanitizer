@@ -126,7 +126,6 @@ extern "C" void fpsan_trace(temp_entry *current){
 }
 #endif
 
-
 // fpsan_check_branch, fpsan_check_conversion, fpsan_check_error are
 // functions that user can set breakpoint on
 extern "C" void fpsan_handle_fptrunc(float val, temp_entry* op1){
@@ -223,7 +222,6 @@ extern "C" void fpsan_init() {
       (smem_entry **)mmap(0, memLen, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
 
 #else
-    
     size_t hash_size = (HASH_TABLE_ENTRIES) * sizeof(smem_entry);
     m_shadow_memory = 
       (smem_entry *) mmap(0, hash_size, PROT_READ | PROT_WRITE, MMAP_FLAGS, -1, 0);
@@ -274,16 +272,20 @@ extern "C" void fpsan_init_mpfr(temp_entry *op) {
 extern "C" void fpsan_init_store_shadow_dconst(smem_entry *op, double d,
 						  unsigned int linenumber) {
   
-  mpfr_init2(op->val, m_precision);
+  if(!op->is_init){
+    op->is_init = true;
+    mpfr_init2(op->val, m_precision);
+  }
   m_store_shadow_dconst(op, d, linenumber);
-
 }
 
 extern "C" void fpsan_init_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
 
-  mpfr_init2(op->val, m_precision);
+  if(!op->is_init){
+    op->is_init = true;
+    mpfr_init2(op->val, m_precision);
+  }
   m_store_shadow_fconst(op, f, linenumber);
-
 }
 
 int m_isnan(mpfr_t real){
@@ -321,7 +323,6 @@ void m_store_shadow_fconst(smem_entry *op, float f, unsigned int linenumber) {
   op->lineno = linenumber;
   op->opcode = CONSTANT;
   op->computed = f;
-
 }
 
 extern "C" void fpsan_store_tempmeta_dconst(temp_entry *op, double d, unsigned int linenumber) {
@@ -476,7 +477,6 @@ void m_print_real(mpfr_t mpfr_val){
 
 extern "C" void fpsan_store_shadow_fconst(void* toAddr, float op, unsigned int linenumber){
 
-  
   size_t toAddrInt = (size_t) toAddr;
   smem_entry* dest = m_get_shadowaddress(toAddrInt);
   fpsan_init_store_shadow_fconst(dest, op, linenumber);
@@ -919,6 +919,21 @@ extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
 
   mpfr_sub(res->val, zero, op1Idx->val, MPFR_RNDN);
   mpfr_clear(zero);
+#ifdef TRACING
+  res->op1_lock = op1Idx->op1_lock;
+  res->op2_lock = op1Idx->op2_lock;
+  res->op1_key = op1Idx->op1_key;
+  res->op2_key = op1Idx->op2_key;
+  res->lock = op1Idx->lock;
+  res->key = op1Idx->key;
+  res->lhs = op1Idx->lhs;
+  res->rhs = op1Idx->rhs;
+  res->timestamp = op1Idx->timestamp;
+  res->error = op1Idx->error;
+#endif
+
+  res->opcode = op1Idx->opcode;
+  res->computed = -op1Idx->computed;
 }
 
 extern "C" void fpsan_mpfr_fadd_f( temp_entry* op1Idx,
@@ -1303,8 +1318,6 @@ extern "C" void fpsan_func_init(long totalArgs) {
 #endif
   
   m_stack_top = m_stack_top + totalArgs;
-
-  
 }
 
 extern "C" void fpsan_func_exit(long totalArgs) {
@@ -1440,16 +1453,12 @@ extern "C" void fpsan_set_arg_f(size_t argIdx, temp_entry* src, float op) {
     dest->op2_key = src->op2_key;
     dest->rhs = src->rhs;
     dest->timestamp = src->timestamp;
-
 #endif
-    
   }
   else{
     fpsan_store_tempmeta_fconst(dest, op, 0);
-    //    m_store_shadow_fconst(dest, op, 0);
     dest->is_init = true;
   }
-
 }
 
 extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
@@ -1477,14 +1486,10 @@ extern "C" void fpsan_set_arg_d(size_t argIdx, temp_entry* src, double op) {
     dest->op2_key = src->op2_key;
     dest->rhs = src->rhs;
     dest->timestamp = src->timestamp;
-    
-
 #endif
-    
   }
   else{
     fpsan_store_tempmeta_fconst(dest, op, 0);
-    //    m_store_shadow_dconst(dest, op, 0);
     dest->is_init = true;
   }
 }
@@ -1596,10 +1601,24 @@ extern "C" void fpsan_mpfr_sqrtf(temp_entry* op1,
   handle_math_d(SQRT, op1d, op1, computedRes, res, linenumber);
  
 }
+
 extern "C" void fpsan_mpfr_floor(temp_entry* op1, 
                                  double op1d,
                                  temp_entry* res, 
                                  double computedRes,
+                                 unsigned long long int instId, 
+                                 bool debugInfoAvail, 
+                                 unsigned int linenumber, 
+                                 unsigned int colnumber){
+
+  handle_math_d(FLOOR, op1d, op1, computedRes, res, linenumber);
+  
+}
+
+extern "C" void fpsan_mpfr_llvm_f(temp_entry* op1, 
+                                 float op1d,
+                                 temp_entry* res, 
+                                 float computedRes,
                                  unsigned long long int instId, 
                                  bool debugInfoAvail, 
                                  unsigned int linenumber, 
@@ -1673,6 +1692,19 @@ extern "C" void fpsan_mpfr_cos(temp_entry* op1,
 
 }
 
+extern "C" void fpsan_mpfr_llvm_cos_f64(temp_entry* op1, 
+			       double op1d,
+			       temp_entry* res, 
+			       double computedRes,
+			       unsigned long long int instId, 
+			       bool debugInfoAvail, 
+			       unsigned int linenumber, 
+			       unsigned int colnumber){
+
+  handle_math_d(COS, op1d, op1, computedRes, res, linenumber);
+
+}
+
 extern "C" void fpsan_mpfr_atan(temp_entry* op1, 
 				double op1d,
 				temp_entry* res, 
@@ -1711,6 +1743,18 @@ extern "C" void fpsan_mpfr_llvm_floor(temp_entry* op1Idx,
 
 }
 
+extern "C" void fpsan_mpfr_llvm_floor_f(temp_entry* op1Idx, 
+				      double op1d,
+				      temp_entry* res, 
+				      double computedRes,
+				      unsigned long long int instId, 
+				      bool debugInfoAvail, 
+				      unsigned int linenumber, 
+				      unsigned int colnumber){
+
+  handle_math_d(FLOOR, op1d, op1Idx, computedRes, res, linenumber);
+
+}
 extern "C" void fpsan_mpfr_exp(temp_entry* op1Idx, 
 			   double op1d,
 			   temp_entry* res, 
@@ -1761,7 +1805,6 @@ extern "C" void fpsan_mpfr_GSL_MAX_DBL2(temp_entry* op1Idx, double op1d,
 					unsigned int linenumber, 
 					unsigned int colnumber){
   
-
   mpfr_max(res->val, op1Idx->val, op2Idx->val, MPFR_RNDN);
   res->opcode = MAX;
   res->computed = computedRes;
@@ -1805,9 +1848,7 @@ extern "C" void fpsan_mpfr_ldexp2(temp_entry* op1Idx, double op1d,
   res->opcode = LDEXP;
   res->computed = computedRes;
 
-
 #ifdef TRACING  
-  
   int bitsError = m_update_error(res, computedRes);
   res->op1_lock = op1Idx->lock;
   res->op1_key = m_lock_key_map[op1Idx->lock];
@@ -1859,7 +1900,6 @@ extern "C" void fpsan_mpfr_atan22(temp_entry* op1, double op1d,
 				  bool debugInfoAvail, 
 				  unsigned int linenumber, 
 				  unsigned int colnumber){
-  
   
   mpfr_atan2(res->val, op1->val, op2->val, MPFR_RNDN);
   res->opcode = ATAN2;
@@ -1976,6 +2016,7 @@ extern "C" void fpsan_mpfr_log10(temp_entry* op1, temp_entry* res,
   handle_math_d(LOG10, op1d, op1, computedRes, res, linenumber);
 
 }
+
 extern "C" void fpsan_mpfr_log(temp_entry* op1, temp_entry* res,
 			       double op1d, double computedRes,
 			       unsigned long long int instId,
@@ -2005,6 +2046,15 @@ extern "C" void fpsan_mpfr_sin(temp_entry* op1, temp_entry* res,
 
 }
 
+extern "C" void fpsan_mpfr_llvm_sin_f64(temp_entry* op1, temp_entry* res,
+			       double op1d, double computedRes,
+			       unsigned long long int instId,
+			       bool debugInfoAvail, unsigned int linenumber,
+			       unsigned int colnumber){
+  handle_math_d(SIN, op1d, op1, computedRes, res, linenumber);
+
+}
+
 extern "C" void fpsan_mpfr_asin(temp_entry* op1,
 				temp_entry* res,
 				double op1d,
@@ -2014,5 +2064,4 @@ extern "C" void fpsan_mpfr_asin(temp_entry* op1,
 				unsigned int linenumber,
 				unsigned int colnumber){
   handle_math_d(ASIN, op1d, op1, computedRes, res, linenumber);
-
 }

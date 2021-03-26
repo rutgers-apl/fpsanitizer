@@ -5,14 +5,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 
-static cl::opt<int> Precision("fpsan-precision",
-    cl::desc("default mpfr precision is initialized to 512"),
-    cl::Hidden, cl::init(512));
-
-static cl::opt<int> ENV("fpsan-with-type",
-    cl::desc("shadow execution with mpfr"),
-    cl::Hidden, cl::init(2));
-
 void FPSanitizer::addFunctionsToList(std::string FN) {
   std::ofstream myfile;
   myfile.open("functions.txt", std::ios::out|std::ios::app);
@@ -324,24 +316,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
         bool Op1Call = false;
         bool Op2Call = false;
 
-        if(CallInst *CI = dyn_cast<CallInst>(Op1)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              //this operand is function which is not defined, we consider this as a constant
-              Op1Call = true;
-            }
-          }
-        }
-        if(CallInst *CI = dyn_cast<CallInst>(Op2)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              Op2Call = true;
-            }
-          }
-        }
-
         if(isa<ConstantFP>(Op1) || Op1Call){
           if(index-1 > TotalAlloca){
             errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
@@ -436,47 +410,25 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
       else if (CallInst *CI = dyn_cast<CallInst>(&I)){
         Function *Callee = CI->getCalledFunction();
         if (Callee) {
-          if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-            if(index-1 > TotalAlloca){
-              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
-            }
-            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
-              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
-            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
-            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
-
-            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
-
-            index++;
-          }
-          else if(isListedFunction(Callee->getName(), "functions.txt")){
-            if(index-1 > TotalAlloca){
-              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
-            }
-            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
-              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
-            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
-
-            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
-
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
-
-            index++;
-          }
-
           if(isListedFunction(Callee->getName(), "mathFunc.txt") || 
               isListedFunction(Callee->getName(), "functions.txt")){
+            if(index-1 > TotalAlloca){
+              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
+            }
+            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+
+            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
+
+
+            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
+            IRB.CreateCall(FuncInit, {BOGEP});
+
+            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+            IRBE.CreateCall(FuncInit, {BOGEP});
+
+            index++;
             size_t NumOperands = CI->getNumArgOperands();
             Value *Op[NumOperands];
             Type *OpTy[NumOperands];
@@ -484,24 +436,8 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             for(int i = 0; i < NumOperands; i++){
               Op[i] = CI->getArgOperand(i);
               OpTy[i] = Op[i]->getType(); // this should be of float
-              Op1Call[i] = false;
 
-              //handle function call which take as operand another function call,
-              //but that function is not defined. It then should be treated a constant.
-              if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-                if(CallInst *CI = dyn_cast<CallInst>(Op[i])){
-                  Function *Callee = CI->getCalledFunction();
-                  if (Callee) {
-                    if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-                      if(!isListedFunction(Callee->getName(), "functions.txt") ){
-                        //this operand is function which is not defined, we consider this as a constant
-                        Op1Call[i] = true;
-                      }
-                    }
-                  }
-                }
-              }
-              if(isa<ConstantFP>(Op[i]) || Op1Call[i]){
+              if(isa<ConstantFP>(Op[i])){
                 if(index-1 > TotalAlloca){
                   errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
                 }
@@ -511,12 +447,10 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
                 GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op[i]), BOGEP));
 
-
                 FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
                 IRB.CreateCall(FuncInit, {BOGEP});
 
                 if(isFloat(Op[i]->getType())){
-
                   FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
                 }
                 else if(isDouble(Op[i]->getType())){
@@ -524,13 +458,7 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                   FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
                 }
 
-                if(Op1Call[i]){
-                  Instruction *Next = getNextInstruction(BO, &BB);
-                  IRBuilder<> IRBI(Next);
-                  IRBI.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
-                }
-                else
-                  IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
+                IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
                 ConsMap.insert(std::pair<Value*, Value*>(Op[i], BOGEP));
 
 
@@ -539,6 +467,38 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
                 index++;
               }
+            }
+          }
+          else{ //external function
+            if(isFloatType(CI->getType())){
+              if(index-1 > TotalAlloca){
+                errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
+              }
+              Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+                ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+              Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+
+              GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
+
+
+              FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
+              IRB.CreateCall(FuncInit, {BOGEP});
+
+              if(isFloat(CI->getType())){
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, CI->getType(), Int32Ty);
+              }
+              else if(isDouble(CI->getType())){
+
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, CI->getType(), Int32Ty);
+              }
+
+              IRBuilder<> IRR(CI->getNextNode());
+              IRR.CreateCall(FuncInit, {BOGEP, CI, lineNumber});
+              ConsMap.insert(std::pair<Value*, Value*>(CI, BOGEP));
+              FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+              IRBE.CreateCall(FuncInit, {BOGEP});
+
+              index++;
             }
           }
         }
@@ -552,7 +512,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
 
             GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
 
             FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
             IRB.CreateCall(FuncInit, {BOGEP});
@@ -924,24 +883,6 @@ long FPSanitizer::getTotalFPInst(Function *F){
         bool Op1Call = false;
         bool Op2Call = false;
 
-        if(CallInst *CI = dyn_cast<CallInst>(Op1)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              //this operand is function which is not defined, we consider this as a constant
-              Op1Call = true;
-            }
-          }
-        }
-        if(CallInst *CI = dyn_cast<CallInst>(Op2)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              Op2Call = true;
-            }
-          }
-        }
-
         if(isa<ConstantFP>(Op1) || Op1Call){
           TotalAlloca++;
         }
@@ -957,15 +898,9 @@ long FPSanitizer::getTotalFPInst(Function *F){
       else if (CallInst *CI = dyn_cast<CallInst>(&I)){
         Function *Callee = CI->getCalledFunction();
         if (Callee) {
-          if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-            TotalAlloca++;
-          }
-          else if(isListedFunction(Callee->getName(), "functions.txt")){
-            TotalAlloca++;
-          }
-
           if(isListedFunction(Callee->getName(), "mathFunc.txt") || 
               isListedFunction(Callee->getName(), "functions.txt")){
+            TotalAlloca++;
             size_t NumOperands = CI->getNumArgOperands();
             Value *Op[NumOperands];
             Type *OpTy[NumOperands];
@@ -973,25 +908,17 @@ long FPSanitizer::getTotalFPInst(Function *F){
             for(int i = 0; i < NumOperands; i++){
               Op[i] = CI->getArgOperand(i);
               OpTy[i] = Op[i]->getType(); // this should be of float
-              Op1Call[i] = false;
 
-              if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-                if(CallInst *CI = dyn_cast<CallInst>(Op[i])){
-                  Function *Callee = CI->getCalledFunction();
-                  if (Callee) {
-                    if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-                      //this operand is function which is not defined, we consider this as a constant
-                      Op1Call[i] = true;
-                    }
-                  }
-                }
-              }
-              if(isa<ConstantFP>(Op[i]) || Op1Call[i]){
+              if(isa<ConstantFP>(Op[i])){
                 TotalAlloca++;
               }
             }
           }
-
+          else{
+            if(isFloatType(CI->getType())){
+              TotalAlloca++;
+            }
+          }
         }
         else{//indirect
           if(isFloatType(CI->getType())){
@@ -1106,7 +1033,6 @@ FPSanitizer::getNextInstructionNotPhi(Instruction *I, BasicBlock *BB){
 }
 
 void FPSanitizer::findInterestingFunctions(Function *F){
-
   long TotalFPInst = getTotalFPInst(F); 
   if(TotalFPInst > 0){
     std::string name = F->getName();
@@ -1126,7 +1052,6 @@ void FPSanitizer::handleFuncMainInit(Function *F){
   Type* VoidTy = Type::getVoidTy(M->getContext());
   Type* Int64Ty = Type::getInt64Ty(M->getContext());
 
-  Constant* Prec = ConstantInt::get(Type::getInt64Ty(M->getContext()), Precision);
   Finish = M->getOrInsertFunction("fpsan_init", VoidTy);
   long TotIns = 0;
 
@@ -1174,7 +1099,7 @@ FPSanitizer::handleCallInst (CallInst *CI,
     if(isFloatType(OpTy[i])){
       Instruction *OpIns = dyn_cast<Instruction>(Op[i]);
       Value *OpIdx;
-      bool res = handleOperand(I, Op[i], F, &OpIdx);
+      bool res = handleOperand(Op[i], &OpIdx);
       if(!res){
         errs()<<"\nError !!! metadata not found for operand:\n";
         Op[i]->dump();
@@ -1245,7 +1170,7 @@ void FPSanitizer::handleMemset(CallInst *CI, BasicBlock *BB, Function *F, std::s
   Value *size = CI->getOperand(2);
   if (BitCastInst *BI = dyn_cast<BitCastInst>(Op1Addr)) {
     if (checkIfBitcastFromFP(BI)) {
-      FuncInit = M->getOrInsertFunction("fpsan_handle_memset", VoidTy, Int32Ty,
+      FuncInit = M->getOrInsertFunction("fpsan_handle_memset", VoidTy,
           PtrVoidTy, Int8Ty, Int64Ty);
       IRB.CreateCall(FuncInit, {Op1Addr, Op2Val, size});
     }
@@ -1255,7 +1180,7 @@ void FPSanitizer::handleMemset(CallInst *CI, BasicBlock *BB, Function *F, std::s
     if (BitCastInst *BI = dyn_cast<BitCastInst>(Addr)) {
       if (checkIfBitcastFromFP(BI)) {
         FuncInit = M->getOrInsertFunction("fpsan_handle_memset", VoidTy,
-            Int32Ty, PtrVoidTy, Int8Ty, Int64Ty);
+            PtrVoidTy, Int8Ty, Int64Ty);
         IRB.CreateCall(FuncInit, {Addr, Op2Val, size});
       }
     }
@@ -1362,12 +1287,20 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
 
   std::string funcName;
 
-
-  if(CallName == "llvm.ceil.f64"){
+  if (CallName == "llvm.cos.f64") {
+    funcName = "fpsan_mpfr_llvm_cos_f64";
+  }
+  else if (CallName == "llvm.sin.f64") {
+    funcName = "fpsan_mpfr_llvm_sin_f64";
+  }
+  else if(CallName == "llvm.ceil.f64"){
     funcName = "fpsan_mpfr_llvm_ceil";
   }
   else if(CallName == "llvm.floor.f64"){
     funcName = "fpsan_mpfr_llvm_floor";
+  }
+  else if(CallName == "llvm.floor.f32"){
+    funcName = "fpsan_mpfr_llvm_floor_f";
   }
   else if(CallName == "llvm.fabs.f64"){
     funcName = "fpsan_mpfr_llvm_fabs";
@@ -1381,7 +1314,7 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
     OpTy[i] = Op[i]->getType(); // this should be of float
     Op1Call[i] = false;
     if(isFloatType(OpTy[i])){
-      bool res = handleOperand(I, Op[i], F, &ConsIdx[i]);
+      bool res = handleOperand(Op[i], &ConsIdx[i]);
       if(!res){
         errs()<<"\nError !!! metadata not found for operand:\n";
         Op[i]->dump();
@@ -1422,13 +1355,10 @@ FPSanitizer::handleMathLibFunc (CallInst *CI,
   IRB.CreateCall(FuncInit, {BOGEP, CI});
 }
 
-bool FPSanitizer::handleOperand(Instruction *I, Value* OP, Function *F, Value** ConsInsIndex){
-  Module *M = F->getParent();
+bool FPSanitizer::handleOperand(Value* OP, Value** ConsInsIndex){
   long Idx = 0;
 
-  IRBuilder<> IRB(I);
   Instruction *OpIns = dyn_cast<Instruction>(OP);	
-  Type* Int64Ty = Type::getInt64Ty(M->getContext());
 
   if(ConsMap.count(OP) != 0){
     *ConsInsIndex = ConsMap.at(OP);
@@ -1449,28 +1379,17 @@ bool FPSanitizer::handleOperand(Instruction *I, Value* OP, Function *F, Value** 
   }
   else if(isa<FPTruncInst>(OP) || isa<FPExtInst>(OP)){
     Value *OP1 = OpIns->getOperand(0);
-
-    if(isa<FPTruncInst>(OP1) || isa<FPExtInst>(OP1)){
-      Value *OP2 = (dyn_cast<Instruction>(OP1))->getOperand(0);
-      if(MInsMap.count(dyn_cast<Instruction>(OP2)) != 0){ //TODO need recursive func
-        *ConsInsIndex = MInsMap.at(dyn_cast<Instruction>(OP2));
-        return true;
-      }
-      else{
-        return false;
-      }
-    }
-    else if(MInsMap.count(dyn_cast<Instruction>(OP1)) != 0){
-      *ConsInsIndex = MInsMap.at(dyn_cast<Instruction>(OP1));
-      return true;
-    }
-    else if(ConsMap.count(OP1) != 0){
-      *ConsInsIndex = ConsMap.at(OP1);
-      return true;
-    }
-    else{
-      return false;
-    }
+    return handleOperand(OP1, ConsInsIndex);
+    *ConsInsIndex = UndefValue::get(MPtrTy);
+    return true;
+  }
+  else if(GEPMap.count(dyn_cast<Instruction>(OP)) != 0){
+    *ConsInsIndex = GEPMap.at(dyn_cast<Instruction>(OP));
+    return true;
+  }
+  else if(isa<UndefValue>(OP)){
+    *ConsInsIndex = ConstantPointerNull::get(cast<PointerType>(MPtrTy));
+    return true;
   }
   else{
     return false;
@@ -1524,7 +1443,7 @@ void FPSanitizer::handleStore(StoreInst *SI, BasicBlock *BB, Function *F){
   }
   if(isFloatType(StoreTy) || BTFlag){
     Value* InsIndex;
-    bool res = handleOperand(SI, OP, F, &InsIndex);
+    bool res = handleOperand(OP, &InsIndex);
     if(res){ //handling registers
       SetRealTemp = M->getOrInsertFunction("fpsan_store_shadow", VoidTy, PtrVoidTy, MPtrTy);
       IRB.CreateCall(SetRealTemp, {BCToAddr, InsIndex});
@@ -1561,7 +1480,7 @@ void FPSanitizer::handleNewPhi(Function *F){
 
         if (IncValue == PN) continue; //TODO
         Value* InsIndex;
-        bool res = handleOperand(it->first, IncValue, F, &InsIndex);
+        bool res = handleOperand(IncValue, &InsIndex);
         if(!res){
           errs()<<"handleNewPhi:Error !!! metadata not found for operand:\n";
           IncValue->dump();
@@ -1608,7 +1527,7 @@ void FPSanitizer::handleSelect(SelectInst *SI, BasicBlock *BB, Function *F){
   Value *OP1 = SI->getOperand(0);
 
   Value* InsIndex2, *InsIndex3;
-  bool res1 = handleOperand(I, SI->getOperand(1), F, &InsIndex2);
+  bool res1 = handleOperand(SI->getOperand(1), &InsIndex2);
   if(!res1){
     errs()<<"\nhandleSelect: Error !!! metadata not found for op:"<<"\n";
     SI->getOperand(1)->dump();
@@ -1616,7 +1535,7 @@ void FPSanitizer::handleSelect(SelectInst *SI, BasicBlock *BB, Function *F){
     I->dump();
     exit(1);
   }
-  bool res2 = handleOperand(I, SI->getOperand(2), F, &InsIndex3);
+  bool res2 = handleOperand(SI->getOperand(2), &InsIndex3);
   if(!res2){
     errs()<<"\nhandleSelect: Error !!! metadata not found for op:"<<"\n";
     SI->getOperand(1)->dump();
@@ -1662,7 +1581,7 @@ void FPSanitizer::handleReturn(ReturnInst *RI, BasicBlock *BB, Function *F){
   if (RI->getNumOperands() != 0){
     Value *OP = RI->getOperand(0);
     if(isFloatType(OP->getType())){
-      bool res = handleOperand(dyn_cast<Instruction>(RI), OP, F, &OpIdx);
+      bool res = handleOperand(OP, &OpIdx);
       if(!res){
         errs()<<"\nhandleReturn: Error !!! metadata not found for op:"<<"\n";
         OP->dump();
@@ -1692,7 +1611,7 @@ void FPSanitizer::handleFNeg(UnaryOperator *UO, BasicBlock *BB, Function *F) {
   Module *M = F->getParent();
 
   Value *InsIndex1;
-  bool res1 = handleOperand(I, UO->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(UO->getOperand(0), &InsIndex1);
   if (!res1) {
     errs() << *F << "\n";
     errs() << "handleBinOp: Error !!! metadata not found for op:"
@@ -1737,7 +1656,7 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
   Module *M = F->getParent();
 
   Value* InsIndex1, *InsIndex2; 
-  bool res1 = handleOperand(I, BO->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(BO->getOperand(0), &InsIndex1);
   if(!res1){
     errs()<<"handleBinOp: Error !!! metadata not found for op:"<<"\n";
     BO->getOperand(0)->dump();
@@ -1746,7 +1665,7 @@ void FPSanitizer::handleBinOp(BinaryOperator* BO, BasicBlock *BB, Function *F){
     exit(1);
   }
 
-  bool res2 = handleOperand(I, BO->getOperand(1), F, &InsIndex2);
+  bool res2 = handleOperand(BO->getOperand(1), &InsIndex2);
   if(!res2){
     errs()<<"handleBinOp: Error !!! metadata not found for op:"<<"\n";
     BO->getOperand(1)->dump();
@@ -1805,7 +1724,7 @@ void FPSanitizer::handleFPTrunc(FPTruncInst *FPT, BasicBlock *BB, Function *F){
   Module *M = F->getParent();
 
   Value *InsIndex1;
-  bool res1 = handleOperand(I, FPT->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(FPT->getOperand(0), &InsIndex1);
   if(!res1){
     errs()<<"handleFPTrunc: Error !!! metadata not found for op:"<<"\n";
     FPT->getOperand(0)->dump();
@@ -1827,7 +1746,7 @@ void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
   Module *M = F->getParent();
 
   Value *InsIndex1, *InsIndex2;
-  bool res1 = handleOperand(I, FCI->getOperand(0), F, &InsIndex1);
+  bool res1 = handleOperand(FCI->getOperand(0), &InsIndex1);
   if(!res1){
     errs()<<"handleFcmp: Error !!! metadata not found for op:"<<"\n";
     FCI->getOperand(0)->dump();
@@ -1835,7 +1754,7 @@ void FPSanitizer::handleFcmp(FCmpInst *FCI, BasicBlock *BB, Function *F){
     I->dump();
     exit(1);
   }
-  bool res2 = handleOperand(I, FCI->getOperand(1), F, &InsIndex2);
+  bool res2 = handleOperand(FCI->getOperand(1), &InsIndex2);
   if(!res2){
     errs()<<"handleFcmp: Error !!! metadata not found for op:"<<"\n";
     FCI->getOperand(1)->dump();
@@ -1977,21 +1896,16 @@ void FPSanitizer::handleIns(Instruction *I, BasicBlock *BB, Function *F){
     if (Callee) {
       if(Callee->getName().startswith("llvm.memcpy"))
         handleMemCpy(CI, BB, F, Callee->getName());
-      if (Callee->getName().startswith("llvm.memset"))
+      else if (Callee->getName().startswith("llvm.memset"))
         handleMemset(CI, BB, F, Callee->getName());
-      if(isListedFunction(Callee->getName(), "mathFunc.txt"))
+      else if(isListedFunction(Callee->getName(), "mathFunc.txt"))
         handleMathLibFunc(CI, BB, F, Callee->getName());
       else if(isListedFunction(Callee->getName(), "functions.txt")){
         handleCallInst(CI, BB, F);
       }
     }
     else if(CallSite(I).isIndirectCall()){
-      llvm::errs()<<"float type\n";
       handleCallInst(CI, BB, F);
-      // long TotalFPInst = getTotalFPInst(CI->getCalledFunction()); 
-      // if(TotalFPInst > 0){
-      //  handleCallInst(CI, BB, F);
-      //  }
     }
   }     
 }
