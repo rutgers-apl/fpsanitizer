@@ -62,7 +62,7 @@ struct error_info {
  */
 struct smem_entry{
 
-  double val;
+  mpfr_t val;
   double computed;
   unsigned int lineno;
   enum fp_op opcode;
@@ -79,7 +79,7 @@ struct smem_entry{
 
 struct temp_entry{
 
-  double val;
+  mpfr_t val;
   double computed;
   unsigned int lineno;
   enum fp_op opcode;
@@ -123,7 +123,7 @@ smem_entry ** m_shadow_memory;
 
 #else
 /* 2 million entries in the hash table */
-const size_t HASH_TABLE_ENTRIES = ((size_t) 32 * (size_t) 1024 * (size_t) 1024);
+const size_t HASH_TABLE_ENTRIES = ((size_t) 2 * (size_t) 1024 * (size_t) 1024);
 
 smem_entry * m_shadow_memory;
 
@@ -199,13 +199,14 @@ void m_print_error(size_t opcode,
 		   bool debugInfoAvail, 
 		   unsigned int linenumber, 
 		   unsigned int colnumber);
-void m_print_real(double);
+void m_print_real(mpfr_t);
 void m_print_trace (void);
+int m_isnan(mpfr_t real);
 int m_get_depth(temp_entry*);
 void m_compute(fp_op , double, temp_entry *, double,
 	       temp_entry *, double, temp_entry *, size_t);
 
 void m_store_shadow_dconst(smem_entry *, double , unsigned int);
 void m_store_shadow_fconst(smem_entry *, float , unsigned int);
-bool m_check_branch(double, double, size_t);
+bool m_check_branch(mpfr_t*, mpfr_t*, size_t);
 #endif
