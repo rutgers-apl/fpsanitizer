@@ -316,24 +316,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
         bool Op1Call = false;
         bool Op2Call = false;
 
-        if(CallInst *CI = dyn_cast<CallInst>(Op1)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              //this operand is function which is not defined, we consider this as a constant
-              Op1Call = true;
-            }
-          }
-        }
-        if(CallInst *CI = dyn_cast<CallInst>(Op2)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              Op2Call = true;
-            }
-          }
-        }
-
         if(isa<ConstantFP>(Op1) || Op1Call){
           if(index-1 > TotalAlloca){
             errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
@@ -428,47 +410,25 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
       else if (CallInst *CI = dyn_cast<CallInst>(&I)){
         Function *Callee = CI->getCalledFunction();
         if (Callee) {
-          if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-            if(index-1 > TotalAlloca){
-              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
-            }
-            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
-              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
-            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
-            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
-
-            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
-
-            index++;
-          }
-          else if(isListedFunction(Callee->getName(), "functions.txt")){
-            if(index-1 > TotalAlloca){
-              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
-            }
-            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
-              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
-            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
-
-            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
-
-            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
-            IRB.CreateCall(FuncInit, {BOGEP});
-
-            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
-            IRBE.CreateCall(FuncInit, {BOGEP});
-
-            index++;
-          }
-
           if(isListedFunction(Callee->getName(), "mathFunc.txt") || 
               isListedFunction(Callee->getName(), "functions.txt")){
+            if(index-1 > TotalAlloca){
+              errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
+            }
+            Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+              ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+            Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+
+            GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
+
+
+            FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
+            IRB.CreateCall(FuncInit, {BOGEP});
+
+            FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+            IRBE.CreateCall(FuncInit, {BOGEP});
+
+            index++;
             size_t NumOperands = CI->getNumArgOperands();
             Value *Op[NumOperands];
             Type *OpTy[NumOperands];
@@ -476,24 +436,8 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             for(int i = 0; i < NumOperands; i++){
               Op[i] = CI->getArgOperand(i);
               OpTy[i] = Op[i]->getType(); // this should be of float
-              Op1Call[i] = false;
 
-              //handle function call which take as operand another function call,
-              //but that function is not defined. It then should be treated a constant.
-              if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-                if(CallInst *CI = dyn_cast<CallInst>(Op[i])){
-                  Function *Callee = CI->getCalledFunction();
-                  if (Callee) {
-                    if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-                      if(!isListedFunction(Callee->getName(), "functions.txt") ){
-                        //this operand is function which is not defined, we consider this as a constant
-                        Op1Call[i] = true;
-                      }
-                    }
-                  }
-                }
-              }
-              if(isa<ConstantFP>(Op[i]) || Op1Call[i]){
+              if(isa<ConstantFP>(Op[i])){
                 if(index-1 > TotalAlloca){
                   errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
                 }
@@ -503,12 +447,10 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
                 GEPMap.insert(std::pair<Instruction*, Value*>(dyn_cast<Instruction>(Op[i]), BOGEP));
 
-
                 FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
                 IRB.CreateCall(FuncInit, {BOGEP});
 
                 if(isFloat(Op[i]->getType())){
-
                   FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
                 }
                 else if(isDouble(Op[i]->getType())){
@@ -516,13 +458,7 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
                   FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, OpTy[i], Int32Ty);
                 }
 
-                if(Op1Call[i]){
-                  Instruction *Next = getNextInstruction(BO, &BB);
-                  IRBuilder<> IRBI(Next);
-                  IRBI.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
-                }
-                else
-                  IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
+                IRB.CreateCall(FuncInit, {BOGEP, Op[i], lineNumber});
                 ConsMap.insert(std::pair<Value*, Value*>(Op[i], BOGEP));
 
 
@@ -531,6 +467,38 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
 
                 index++;
               }
+            }
+          }
+          else{ //external function
+            if(isFloatType(CI->getType())){
+              if(index-1 > TotalAlloca){
+                errs()<<"Error:\n\n\n index > TotalAlloca "<<index<<":"<<TotalAlloca<<"\n";
+              }
+              Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(M->getContext()), 0),
+                ConstantInt::get(Type::getInt32Ty(M->getContext()), index)};
+              Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
+
+              GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
+
+
+              FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
+              IRB.CreateCall(FuncInit, {BOGEP});
+
+              if(isFloat(CI->getType())){
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_fconst", VoidTy, MPtrTy, CI->getType(), Int32Ty);
+              }
+              else if(isDouble(CI->getType())){
+
+                FuncInit = M->getOrInsertFunction("fpsan_store_tempmeta_dconst", VoidTy, MPtrTy, CI->getType(), Int32Ty);
+              }
+
+              IRBuilder<> IRR(CI->getNextNode());
+              IRR.CreateCall(FuncInit, {BOGEP, CI, lineNumber});
+              ConsMap.insert(std::pair<Value*, Value*>(CI, BOGEP));
+              FuncInit = M->getOrInsertFunction("fpsan_clear_mpfr", VoidTy, MPtrTy);
+              IRBE.CreateCall(FuncInit, {BOGEP});
+
+              index++;
             }
           }
         }
@@ -544,7 +512,6 @@ void FPSanitizer::createGEP(Function *F, AllocaInst *Alloca, long TotalAlloca){
             Value *BOGEP = IRB.CreateGEP(Alloca, Indices);
 
             GEPMap.insert(std::pair<Instruction*, Value*>(&I, BOGEP));
-
 
             FuncInit = M->getOrInsertFunction("fpsan_init_mpfr", VoidTy, MPtrTy);
             IRB.CreateCall(FuncInit, {BOGEP});
@@ -916,24 +883,6 @@ long FPSanitizer::getTotalFPInst(Function *F){
         bool Op1Call = false;
         bool Op2Call = false;
 
-        if(CallInst *CI = dyn_cast<CallInst>(Op1)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              //this operand is function which is not defined, we consider this as a constant
-              Op1Call = true;
-            }
-          }
-        }
-        if(CallInst *CI = dyn_cast<CallInst>(Op2)){
-          Function *Callee = CI->getCalledFunction();
-          if (Callee) {
-            if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-              Op2Call = true;
-            }
-          }
-        }
-
         if(isa<ConstantFP>(Op1) || Op1Call){
           TotalAlloca++;
         }
@@ -949,15 +898,9 @@ long FPSanitizer::getTotalFPInst(Function *F){
       else if (CallInst *CI = dyn_cast<CallInst>(&I)){
         Function *Callee = CI->getCalledFunction();
         if (Callee) {
-          if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-            TotalAlloca++;
-          }
-          else if(isListedFunction(Callee->getName(), "functions.txt")){
-            TotalAlloca++;
-          }
-
           if(isListedFunction(Callee->getName(), "mathFunc.txt") || 
               isListedFunction(Callee->getName(), "functions.txt")){
+            TotalAlloca++;
             size_t NumOperands = CI->getNumArgOperands();
             Value *Op[NumOperands];
             Type *OpTy[NumOperands];
@@ -965,25 +908,17 @@ long FPSanitizer::getTotalFPInst(Function *F){
             for(int i = 0; i < NumOperands; i++){
               Op[i] = CI->getArgOperand(i);
               OpTy[i] = Op[i]->getType(); // this should be of float
-              Op1Call[i] = false;
 
-              if(isListedFunction(Callee->getName(), "mathFunc.txt")){
-                if(CallInst *CI = dyn_cast<CallInst>(Op[i])){
-                  Function *Callee = CI->getCalledFunction();
-                  if (Callee) {
-                    if(!isListedFunction(Callee->getName(), "mathFunc.txt")){
-                      //this operand is function which is not defined, we consider this as a constant
-                      Op1Call[i] = true;
-                    }
-                  }
-                }
-              }
-              if(isa<ConstantFP>(Op[i]) || Op1Call[i]){
+              if(isa<ConstantFP>(Op[i])){
                 TotalAlloca++;
               }
             }
           }
-
+          else{
+            if(isFloatType(CI->getType())){
+              TotalAlloca++;
+            }
+          }
         }
         else{//indirect
           if(isFloatType(CI->getType())){
@@ -1446,6 +1381,14 @@ bool FPSanitizer::handleOperand(Value* OP, Value** ConsInsIndex){
     Value *OP1 = OpIns->getOperand(0);
     return handleOperand(OP1, ConsInsIndex);
     *ConsInsIndex = UndefValue::get(MPtrTy);
+    return true;
+  }
+  else if(GEPMap.count(dyn_cast<Instruction>(OP)) != 0){
+    *ConsInsIndex = GEPMap.at(dyn_cast<Instruction>(OP));
+    return true;
+  }
+  else if(isa<UndefValue>(OP)){
+    *ConsInsIndex = ConstantPointerNull::get(cast<PointerType>(MPtrTy));
     return true;
   }
   else{

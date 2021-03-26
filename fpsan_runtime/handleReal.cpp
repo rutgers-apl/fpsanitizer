@@ -914,7 +914,7 @@ extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
     unsigned int linenumber) {
 
   mpfr_t zero;
-  mpfr_init2(zero, m_precision[buf_id].index);
+  mpfr_init2(zero, m_precision);
   mpfr_set_d(zero, 0, MPFR_RNDN);
 
   mpfr_sub(res->val, zero, op1Idx->val, MPFR_RNDN);
@@ -932,7 +932,6 @@ extern "C" void fpsan_mpfr_fneg(temp_entry *op1Idx, temp_entry *res,
   res->error = op1Idx->error;
 #endif
 
-  res->inst_id = op1Idx->inst_id;
   res->opcode = op1Idx->opcode;
   res->computed = -op1Idx->computed;
 }

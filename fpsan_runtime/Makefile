@@ -4,14 +4,14 @@ TD_ROOT := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
 CXX=g++
 LINKER=g++
 LDFLAGS+= -shared
-OPT=-O3
+OPT=-O0
 
 PREC := $(if $(PRECISION),$(PRECISION), "PREC_512")
 #To enable tracing run - export SET_TRACING=TRACING
 TRACING := $(if $(SET_TRACING), $(SET_TRACING), "TRACING")
 
 #To enable selective execution
-SELECTIVE := $(if $(SET_SELECTIVE), $(SET_SELECTIVE), "NO_SELECTIVE")
+SELECTIVE := $(if $(SET_SELECTIVE), $(SET_SELECTIVE), "SELECTIVE")
 CXXFLAGS+= -D$(SELECTIVE) -D$(TRACING) -D $(PREC) -fPIC -g -std=c++11 -rdynamic -Wall -lmpfr -pthread
 
 
