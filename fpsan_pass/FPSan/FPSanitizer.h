@@ -14,8 +14,10 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include <fstream>
 #include <queue>
+#include <set>
 
 using namespace llvm;
 
@@ -56,6 +58,8 @@ namespace {
     void handleMemset(CallInst *CI, BasicBlock *BB, Function *F, std::string CallName);
     void handlePositLibFunc(CallInst *CI, BasicBlock *BB, Function *F, std::string Name);
 		void handleCallInst (CallInst *CI, BasicBlock *BB, Function *F);
+		void handleInvokeInst (InvokeInst *CI, BasicBlock *BB, Function *F);
+    void handleError (CallInst *CI, BasicBlock *BB, Function *F);
     bool isListedFunction(StringRef FN, std::string FileName);
     void addFunctionsToList(std::string FN);
     bool isFloatType(Type *InsType);
@@ -72,6 +76,7 @@ namespace {
     Type *MPtrTy;
     Type *RealPtr;
     StructType* Real;
+    std::set<StringRef> LibFuncList;
     std::map<Value*, Value*> ConsMap;
     std::map<Instruction*, Value*> GEPMap;
     std::map<ConstantFP*, Value*> ConstantMap;
@@ -86,9 +91,16 @@ namespace {
     std::map<Function*, size_t> FuncTotalArg;
     //list of all functions need to be instrumented
     SmallVector<Function*, 8> AllFuncList;
+    SmallVector<Instruction *, 8> AllInstList;
     static char ID; // Pass identification
     long InsCount = 0;
 
+    std::function<const TargetLibraryInfo &(Function &F)> GetTLI;
+
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.setPreservesCFG();
+      AU.addRequired<TargetLibraryInfoWrapperPass>();
+    }
   private:
     FunctionCallee Func;
     FunctionCallee LoadCall;
